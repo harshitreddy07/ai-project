@@ -1,0 +1,2635 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NexusCity AI v4.2 — Autonomous Integrated Command & Control Center (ICCC)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js (with safe fallback if unavailable) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    },
+                    colors: {
+                        iccc: {
+                            950: '#050811',
+                            900: '#0A101F',
+                            800: '#111A2E',
+                            700: '#1C2842',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #050811; }
+        ::-webkit-scrollbar-thumb { background: #1C2842; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #2E4066; }
+
+        .glass-panel {
+            background: rgba(17, 26, 46, 0.84);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(56, 189, 248, 0.15);
+        }
+
+        .glass-card {
+            background: rgba(10, 16, 31, 0.92);
+            border: 1px solid rgba(148, 163, 184, 0.13);
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 18px;
+            width: 18px;
+            border-radius: 50%;
+            background: #06B6D4;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 12px rgba(6, 182, 212, 0.8);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #1C2842;
+            border-radius: 999px;
+        }
+
+        @keyframes pulseBorder {
+            0%, 100% { border-color: rgba(244, 63, 94, 0.9); box-shadow: 0 0 20px rgba(244, 63, 94, 0.35); }
+            50% { border-color: rgba(56, 189, 248, 0.9); box-shadow: 0 0 20px rgba(56, 189, 248, 0.35); }
+        }
+        .emergency-pulse {
+            animation: pulseBorder 1.2s infinite;
+        }
+
+        @keyframes fadeSlide {
+            from { opacity: 0; transform: translateY(-6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .feed-item { animation: fadeSlide 0.25s ease-out; }
+    </style>
+</head>
+<body class="bg-iccc-950 text-slate-100 font-sans antialiased min-h-screen flex flex-col selection:bg-cyan-500 selection:text-white">
+
+    <!-- Safe Non-Blocking Runtime Guard Strip (Only shown if a script error ever occurs) -->
+    <div id="runtime-guard-bar" class="hidden bg-amber-950/90 border-b border-amber-500/50 px-4 py-1.5 text-[11px] font-mono text-amber-200 flex items-center justify-between">
+        <span id="runtime-guard-msg">Safe recovery guard active: recovered from a minor script event.</span>
+        <button onclick="document.getElementById('runtime-guard-bar').classList.add('hidden')" class="text-amber-300 hover:text-white px-2">Dismiss</button>
+    </div>
+
+    <!-- Multi-Toast Notification Stack (Bottom-Left) -->
+    <div id="toast-stack" class="fixed bottom-4 left-4 z-50 flex flex-col gap-2 max-w-sm pointer-events-none"></div>
+
+    <!-- ========================================================= -->
+    <!-- REAL-TIME NOTIFICATION CENTER SLIDE-OVER DRAWER            -->
+    <!-- ========================================================= -->
+    <div id="notif-drawer" class="hidden fixed inset-y-0 right-0 z-50 w-full sm:w-[410px] glass-panel border-l border-cyan-500/40 shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-slate-800 bg-iccc-900/95 flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-300">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white">ICCC Notification Center</h3>
+                    <p id="notif-drawer-sub" class="text-[10px] font-mono text-cyan-300">Real-Time Alerts & AI Events</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-1.5">
+                <button onclick="markAllNotificationsRead()" class="text-[10px] font-mono px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300">Mark Read</button>
+                <button onclick="clearAllNotifications()" class="text-[10px] font-mono px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-400">Clear</button>
+                <button onclick="toggleNotificationDrawer()" class="text-slate-400 hover:text-white p-1.5" aria-label="Close Notification Center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+        </div>
+
+        <div class="p-2.5 bg-iccc-950/70 border-b border-slate-800 flex flex-wrap gap-1">
+            <button onclick="setNotifFilter('ALL')" id="nf-ALL" class="notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">ALL</button>
+            <button onclick="setNotifFilter('EMERGENCY')" id="nf-EMERGENCY" class="notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">108/112</button>
+            <button onclick="setNotifFilter('SPEED')" id="nf-SPEED" class="notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">OVERSPEED</button>
+            <button onclick="setNotifFilter('WASTE')" id="nf-WASTE" class="notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">WASTE/GAS</button>
+            <button onclick="setNotifFilter('PARKING')" id="nf-PARKING" class="notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">EV/PARK</button>
+            <button onclick="setifFilter('VISION')" id="nf-VISION" class="notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400">VISION</button>
+        </div>
+
+        <div id="notif-list" class="flex-1 overflow-y-auto p-3 space-y-2 text-xs">
+            <!-- Populated dynamically -->
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- CCTV CAMERA FOCUS MODAL                                   -->
+    <!-- ========================================================= -->
+    <div id="cctv-focus-modal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel border border-violet-500/50 rounded-2xl max-w-2xl w-full p-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+                <div>
+                    <span id="focus-cam-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-violet-500/20 text-violet-300">CAM-01 • YOLOv9-INT8</span>
+                    <h3 id="focus-cam-title" class="text-sm font-bold text-white mt-0.5">Silk Board Junction — ANPR & Signal Monitor</h3>
+                </div>
+                <button onclick="closeCameraFocusModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800" aria-label="Close Camera Modal">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="relative w-full h-64 rounded-xl overflow-hidden bg-iccc-950 border border-slate-800">
+                <canvas id="cctvFocusCanvas"></canvas>
+            </div>
+            <div id="focus-cam-telemetry" class="mt-3 grid grid-cols-3 gap-2 text-xs font-mono">
+                <div class="glass-card p-2 rounded-xl"><span class="text-[10px] text-slate-400 block">OCR ACCURACY</span><span class="text-emerald-400 font-bold">99.2%</span></div>
+                <div class="glass-card p-2 rounded-xl"><span class="text-[10px] text-slate-400 block">INFERENCE</span><span class="text-cyan-400 font-bold">11.4 ms</span></div>
+                <div class="glass-card p-2 rounded-xl"><span class="text-[10px] text-slate-400 block">VAHAN LINK</span><span class="text-amber-300 font-bold">LIVE SYNC</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- AUTOMATED 108 AMBULANCE & 112 POLICE EMERGENCY DISPATCH MODAL -->
+    <!-- ========================================================= -->
+    <div id="emergency-dispatch-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel emergency-pulse border-2 border-rose-500 rounded-2xl max-w-lg w-full p-5 shadow-2xl relative">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 rounded-xl bg-rose-500/20 border border-rose-500 flex items-center justify-center text-rose-400 animate-pulse">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <span class="px-2 py-0.5 rounded bg-rose-600 text-white text-[10px] font-mono font-bold tracking-wider animate-pulse">AUTO-DIALING 108 & 112</span>
+                            <span id="em-call-timer" class="text-xs font-mono text-rose-300 font-bold">00:01</span>
+                        </div>
+                        <h3 class="text-base font-extrabold text-white mt-0.5">CRITICAL COLLISION DETECTED</h3>
+                    </div>
+                </div>
+                <button onclick="closeEmergencyModal()" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800" title="Minimize to HUD">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+                </button>
+            </div>
+
+            <div class="mt-4 space-y-3 text-xs">
+                <div class="grid grid-cols-2 gap-2.5">
+                    <div class="glass-card p-3 rounded-xl">
+                        <span class="text-[10px] font-mono text-slate-400 block">CORRIDOR & GPS</span>
+                        <span id="em-location" class="font-bold text-white mt-0.5 block">MG Road – Brigade Jn</span>
+                        <span id="em-coords" class="font-mono text-[10px] text-cyan-400">12.9756° N, 77.6066° E</span>
+                    </div>
+                    <div class="glass-card p-3 rounded-xl">
+                        <span class="text-[10px] font-mono text-slate-400 block">AI VISION SEVERITY</span>
+                        <span class="font-bold text-rose-400 mt-0.5 block">HIGH IMPACT (98.4% Conf.)</span>
+                        <span class="font-mono text-[10px] text-slate-300">2 Vehicles • Auto-108 Triggered</span>
+                    </div>
+                </div>
+
+                <div class="glass-card p-3 rounded-xl space-y-2 border border-rose-500/30">
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-emerald-400">108 EMRI Ambulance (KA-01-G-1084)</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300">CONNECTED • DISPATCHED</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-cyan-400">112 ERSS Police Patrol Unit-09</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300">ALERTED • EN ROUTE</span>
+                    </div>
+                    <div class="flex items-center justify-between">
+                        <span class="font-semibold text-amber-400">AI Green Corridor Preemption</span>
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">CORRIDOR LOCKED GREEN</span>
+                    </div>
+                </div>
+
+                <div class="p-2.5 rounded-xl bg-cyan-950/40 border border-cyan-500/30 flex items-center justify-between">
+                    <div>
+                        <span class="text-[10px] font-mono text-cyan-300 block">TRAUMA RECEIVING FACILITY</span>
+                        <span id="em-hospital-name" class="font-bold text-white">St. Martha's Trauma & Emergency Hospital</span>
+                    </div>
+                    <span id="em-eta-badge" class="font-mono font-bold text-sm text-emerald-400">ETA 01:45</span>
+                </div>
+            </div>
+
+            <div class="mt-4 flex justify-end gap-2">
+                <button onclick="closeEmergencyModal()" class="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white font-semibold text-xs transition">
+                    Monitor Live on Corridor Twin
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- PARKING 1-CLICK QR RESERVATION MODAL                      -->
+    <!-- ========================================================= -->
+    <div id="parking-booking-modal" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="glass-panel border border-emerald-500/40 rounded-2xl max-w-md w-full p-5 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <h3 class="text-base font-bold text-white">Smart Parking & EV Pass Reserved</h3>
+                <button onclick="document.getElementById('parking-booking-modal').classList.add('hidden')" class="text-slate-400 hover:text-white">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="mt-4 text-center space-y-3">
+                <div class="inline-flex p-3 rounded-2xl bg-white text-slate-950 shadow-lg">
+                    <svg class="w-28 h-28" viewBox="0 0 100 100" fill="currentColor">
+                        <rect x="10" y="10" width="25" height="25" fill="none" stroke="currentColor" stroke-width="5"/>
+                        <rect x="17" y="17" width="11" height="11"/>
+                        <rect x="65" y="10" width="25" height="25" fill="none" stroke="currentColor" stroke-width="5"/>
+                        <rect x="72" y="17" width="11" height="11"/>
+                        <rect x="10" y="65" width="25" height="25" fill="none" stroke="currentColor" stroke-width="5"/>
+                        <rect x="17" y="72" width="11" height="11"/>
+                        <rect x="45" y="15" width="10" height="10"/><rect x="45" y="35" width="10" height="20"/>
+                        <rect x="15" y="45" width="20" height="10"/><rect x="65" y="45" width="25" height="10"/>
+                        <rect x="45" y="65" width="15" height="25"/><rect x="70" y="70" width="20" height="20"/>
+                    </svg>
+                </div>
+                <div>
+                    <span id="qr-pass-id" class="text-xs font-mono px-2.5 py-1 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">PASS #BLR-8842</span>
+                    <h4 id="qr-lot-name" class="text-lg font-bold text-white mt-2">MG Road Multi-Level Deck</h4>
+                    <p id="qr-bay-info" class="text-xs text-slate-300 mt-0.5">Assigned Bay: B2-EV04 (120kW DC Fast Charger) • ₹65/hr</p>
+                </div>
+                <p class="text-[11px] text-slate-400 bg-iccc-900 p-2.5 rounded-xl border border-slate-800">
+                    ANPR entry barrier whitelisted automatically for seamless access.
+                </p>
+            </div>
+            <div class="mt-4">
+                <button onclick="document.getElementById('parking-booking-modal').classList.add('hidden')" class="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition">
+                    Done
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- TOP GLOBAL COMMAND HEADER & LIVE KPI BAR                  -->
+    <!-- ========================================================= -->
+    <header class="sticky top-0 z-40 glass-panel border-b border-slate-800/90 px-4 lg:px-6 py-2.5">
+        <div class="max-w-[1760px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="relative w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500 via-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/></svg>
+                    <span class="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                    </span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-base sm:text-lg font-extrabold tracking-tight text-white">NexusCity <span class="text-cyan-400">AI</span></h1>
+                        <span class="hidden sm:inline-block px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">BENGALURU ICCC v4.2</span>
+                    </div>
+                    <p class="text-[11px] text-slate-400">Autonomous Integrated Command & Control Center</p>
+                </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div class="glass-card px-2.5 py-1.5 rounded-xl hidden sm:flex items-center gap-2">
+                    <svg class="w-3.5 h-3.5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <div>
+                        <span class="text-[9px] font-mono uppercase text-slate-400 block">BLR IST</span>
+                        <span id="top-blr-clock" class="text-xs font-bold font-mono text-cyan-300">19:15:00</span>
+                    </div>
+                </div>
+
+                <div class="glass-card px-3 py-1.5 rounded-xl flex items-center gap-2">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    <div>
+                        <span class="text-[9px] font-mono uppercase text-slate-400 block">City Health</span>
+                        <span id="kpi-efficiency" class="text-xs sm:text-sm font-bold font-mono text-emerald-400">94.8%</span>
+                    </div>
+                </div>
+
+                <div class="glass-card px-3 py-1.5 rounded-xl flex items-center gap-2">
+                    <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/></svg>
+                    <div>
+                        <span class="text-[9px] font-mono uppercase text-slate-400 block">AI Actions</span>
+                        <span id="kpi-interventions" class="text-xs sm:text-sm font-bold font-mono text-cyan-300">142</span>
+                    </div>
+                </div>
+
+                <div class="hidden md:flex glass-card px-3 py-1.5 rounded-xl items-center gap-2">
+                    <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M11 20A7 7 0 0 1 9.8 6.1C15.5 5 17 4.48 19 2c1 2 2 4.18 2 8 0 5.5-4.78 10-10 10Z"/></svg>
+                    <div>
+                        <span class="text-[9px] font-mono uppercase text-slate-400 block">CO₂ Saved</span>
+                        <span id="kpi-co2" class="text-xs sm:text-sm font-bold font-mono text-white">418.5 kg</span>
+                    </div>
+                </div>
+
+                <div class="glass-card px-2.5 py-1.5 rounded-xl flex items-center gap-2 border border-cyan-500/30">
+                    <div>
+                        <span class="text-[11px] font-bold text-white block leading-tight">Autopilot</span>
+                        <span id="autopilot-label" class="text-[9px] font-mono text-cyan-400">ACTIVE</span>
+                    </div>
+                    <button id="autopilot-toggle" onclick="toggleMasterAutopilot()" role="switch" aria-checked="true" class="relative inline-flex h-5 w-10 items-center rounded-full bg-cyan-500 transition-colors">
+                        <span id="autopilot-knob" class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform translate-x-5"></span>
+                    </button>
+                </div>
+
+                <button onclick="toggleNotificationDrawer()" class="relative p-2 rounded-xl glass-card hover:border-cyan-500/50 text-slate-200 hover:text-cyan-300 transition" title="Open Notification Center">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    <span id="notif-badge" class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-mono font-bold flex items-center justify-center">3</span>
+                </button>
+
+                <button onclick="toggleCopilot()" class="px-3 py-2 rounded-xl bg-violet-600/25 hover:bg-violet-600/40 border border-violet-500/40 text-violet-200 font-semibold text-xs transition flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-violet-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3l1.9 5.8L20 10.7l-5.8 1.9L12 18.4l-1.9-5.8L4 10.7l5.8-1.9L12 3z"/></svg>
+                    <span class="hidden sm:inline">Ask NexusCity AI</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ========================================================= -->
+    <!-- MAIN 3-COLUMN ICCC WORKSPACE                              -->
+    <!-- ========================================================= -->
+    <div class="flex-1 max-w-[1760px] w-full mx-auto p-3 lg:p-5 grid grid-cols-1 xl:grid-cols-12 gap-4">
+
+        <!-- LEFT NAVIGATION SIDEBAR (2 Columns on XL) -->
+        <aside class="xl:col-span-2 flex flex-row xl:flex-col gap-2 overflow-x-auto pb-1 xl:pb-0">
+            <button onclick="switchModule('traffic')" id="nav-traffic" class="module-nav flex-1 xl:flex-initial text-left px-3.5 py-3 rounded-2xl transition flex items-center gap-3 bg-cyan-500/15 border border-cyan-500/40 text-white shadow-lg shadow-cyan-500/5">
+                <div class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v4"/><path d="M5 10h14"/><path d="M7 10l-2 10"/><path d="M17 10l2 10"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <span class="text-xs font-bold block truncate">Traffic & Routes</span>
+                    <span class="text-[10px] text-cyan-300/80 hidden sm:block truncate">4 Corridors, Speeds & 108</span>
+                </div>
+            </button>
+
+            <button onclick="switchModule('parking')" id="nav-parking" class="module-nav flex-1 xl:flex-initial text-left px-3.5 py-3 rounded-2xl transition flex items-center gap-3 glass-panel text-slate-400 hover:text-white hover:border-slate-700">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <span class="text-xs font-bold block truncate">Parking & EV Grid</span>
+                    <span class="text-[10px] text-slate-400 hidden sm:block truncate">+12h ML & Fast EV</span>
+                </div>
+            </button>
+
+            <button onclick="switchModule('waste')" id="nav-waste" class="module-nav flex-1 xl:flex-initial text-left px-3.5 py-3 rounded-2xl transition flex items-center gap-3 glass-panel text-slate-400 hover:text-white hover:border-slate-700">
+                <div class="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M7 19H4.815a1.83 1.83 0 0 1-1.57-.881 1.785 1.785 0 0 1-.004-1.784L7.196 9.5"/><path d="M11 19h8.203a1.83 1.83 0 0 0 1.556-.89 1.784 1.784 0 0 0 0-1.775l-1.226-2.12"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <span class="text-xs font-bold block truncate">Waste & EV Fleet</span>
+                    <span class="text-[10px] text-slate-400 hidden sm:block truncate">CH₄, Solar & TSP</span>
+                </div>
+            </button>
+
+            <button onclick="switchModule('surveillance')" id="nav-surveillance" class="module-nav flex-1 xl:flex-initial text-left px-3.5 py-3 rounded-2xl transition flex items-center gap-3 glass-panel text-slate-400 hover:text-white hover:border-slate-700">
+                <div class="w-8 h-8 rounded-lg bg-violet-500/15 text-violet-400 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16.75 12h3.6a1 1 0 0 0 .8-1.6l-5.5-7.3a1 1 0 0 0-1.6 0l-5.5 7.3a1 1 0 0 0 .8 1.6H12"/><path d="M2 20h20"/><path d="M12 12v8"/></svg>
+                </div>
+                <div class="min-w-0">
+                    <span class="text-xs font-bold block truncate">ANPR & Vision</span>
+                    <span class="text-[10px] text-slate-400 hidden sm:block truncate">OCR, Crowd & Fire</span>
+                </div>
+            </button>
+
+            <div class="hidden xl:block mt-auto glass-panel rounded-2xl p-3.5 space-y-2">
+                <div class="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                    <span>BENGALURU GRID</span>
+                    <span id="nav-clock" class="text-cyan-400 font-bold">19:15:00</span>
+                </div>
+                <div class="text-[11px] text-slate-300 space-y-1">
+                    <div class="flex justify-between"><span>Active Road:</span><span id="nav-active-road" class="font-mono text-cyan-300 truncate max-w-[100px]">MG Road</span></div>
+                    <div class="flex justify-between"><span>Speed Limit:</span><span id="nav-speed-limit" class="font-mono text-amber-300">40 km/h</span></div>
+                    <div class="flex justify-between"><span>108 / 112 Link:</span><span class="font-mono text-emerald-400">ARMED</span></div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- CENTER DYNAMIC MODULE WORKSPACE (7 Columns on XL) -->
+        <main class="xl:col-span-7 space-y-4">
+
+            <!-- ========================================================= -->
+            <!-- MODULE A: MULTI-CORRIDOR TRAFFIC & INCIDENT MANAGEMENT    -->
+            <!-- ========================================================= -->
+            <section id="mod-traffic" class="module-section space-y-4">
+
+                <!-- 1. PROMINENT 4-CORRIDOR ROAD SWITCHER & ROUTE SELECTOR -->
+                <div class="glass-panel rounded-2xl p-3.5 space-y-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                            <span class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 font-bold">Bengaluru Corridor Switcher</span>
+                            <h2 id="active-corridor-title" class="text-sm sm:text-base font-extrabold text-white">MG Road – Brigade Jn (4-Way Signal)</h2>
+                            <p id="active-corridor-desc" class="text-[11px] text-slate-400">Urban commercial core • High pedestrian crosswalk activity • 40 km/h zone</p>
+                        </div>
+                        <span id="active-corridor-limit-pill" class="px-2.5 py-1 rounded-xl bg-amber-500/15 border border-amber-500/35 text-xs font-mono font-bold text-amber-300">
+                            LIMIT: 40 km/h
+                        </span>
+                    </div>
+
+                    <!-- 4 Road Corridor Buttons -->
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button onclick="switchRoadCorridor('mg_road')" id="road-btn-mg_road" class="road-switch-btn text-left p-2.5 rounded-xl border transition bg-cyan-500/15 border-cyan-500/50 text-white">
+                            <div class="flex items-center justify-between text-xs font-bold">
+                                <span>1. MG Road – Brigade Jn</span>
+                                <span class="text-[10px] font-mono text-cyan-300">40 km/h</span>
+                            </div>
+                            <p class="text-[10px] text-slate-300 mt-0.5">4-Way Signal • Crosswalks & Turn Pockets</p>
+                        </button>
+
+                        <button onclick="switchRoadCorridor('orr_bellandur')" id="road-btn-orr_bellandur" class="road-switch-btn text-left p-2.5 rounded-xl border transition glass-card border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="flex items-center justify-between text-xs font-bold">
+                                <span>2. ORR – Bellandur Flyover</span>
+                                <span class="text-[10px] font-mono text-emerald-400">80 km/h</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">6-Lane Expressway • Elevated Flyover & Merge</p>
+                        </button>
+
+                        <button onclick="switchRoadCorridor('indiranagar_100ft')" id="road-btn-indiranagar_100ft" class="road-switch-btn text-left p-2.5 rounded-xl border transition glass-card border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="flex items-center justify-between text-xs font-bold">
+                                <span>3. Indiranagar 100ft – CMH Jn</span>
+                                <span class="text-[10px] font-mono text-cyan-300">50 km/h</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">Arterial Corridor • Bus Priority Lane & Signal</p>
+                        </button>
+
+                        <button onclick="switchRoadCorridor('ecity_elevated')" id="road-btn-ecity_elevated" class="road-switch-btn text-left p-2.5 rounded-xl border transition glass-card border-slate-800 text-slate-300 hover:border-slate-700">
+                            <div class="flex items-center justify-between text-xs font-bold">
+                                <span>4. Electronic City Toll Corridor</span>
+                                <span class="text-[10px] font-mono text-emerald-400">80 km/h</span>
+                            </div>
+                            <p class="text-[10px] text-slate-400 mt-0.5">High-Speed Express • FASTag Gantry & Fast Lanes</p>
+                        </button>
+                    </div>
+
+                    <!-- Route Highlight Selector & Waypoints -->
+                    <div class="pt-2 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2">
+                        <div class="flex flex-wrap items-center gap-1.5">
+                            <span class="text-[10px] font-mono text-slate-400 mr-1">ROUTE LAYER:</span>
+                            <button onclick="setRouteHighlight('ALL')" id="route-btn-ALL" class="route-hl-btn px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/35">All Routes</button>
+                            <button onclick="setRouteHighlight('PRIMARY')" id="route-btn-PRIMARY" class="route-hl-btn px-2.5 py-1 rounded-lg text-[10px] font-mono bg-slate-800 text-slate-300">Route A: Main Arterial</button>
+                            <button onclick="setRouteHighlight('SECONDARY')" id="route-btn-SECONDARY" class="route-hl-btn px-2.5 py-1 rounded-lg text-[10px] font-mono bg-slate-800 text-slate-300">Route B: Cross / Merge</button>
+                            <button onclick="setRouteHighlight('EMS')" id="route-btn-EMS" class="route-hl-btn px-2.5 py-1 rounded-lg text-[10px] font-mono bg-slate-800 text-rose-300">108 EMS Corridor</button>
+                        </div>
+                        <span id="route-waypoints-text" class="text-[10px] font-mono text-emerald-300">Waypoints: Trinity → Brigade → Anil Kumble</span>
+                    </div>
+                </div>
+
+                <!-- 2. SIMULATION & EMERGENCY CONTROLS -->
+                <div class="glass-panel rounded-2xl p-3.5 space-y-2.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2.5">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="text-xs font-bold text-white">AI Adaptive Signals</span>
+                            <button id="adaptive-sig-btn" onclick="toggleAdaptiveSignals()" role="switch" aria-checked="true" class="relative inline-flex h-5 w-10 items-center rounded-full bg-emerald-500 transition-colors">
+                                <span id="adaptive-sig-knob" class="inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform translate-x-5"></span>
+                            </button>
+
+                            <button onclick="toggleSpeedOverlay()" id="btn-speed-overlay" class="px-2.5 py-1 rounded-xl bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 text-xs font-mono font-semibold transition">
+                                <span id="speed-overlay-text">Speed Tags: ON</span>
+                            </button>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button onclick="toggleRushHour()" id="btn-rush" class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold transition">
+                                Rush Hour Surge
+                            </button>
+                            <button onclick="triggerRoadAccident()" class="px-2.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/35 border border-rose-500/50 text-rose-300 text-xs font-semibold transition">
+                                Simulate Accident (Auto-108)
+                            </button>
+                            <button onclick="dispatch108Ambulance(false)" class="px-2.5 py-1.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/40 text-cyan-300 text-xs font-semibold transition">
+                                Dispatch 108 Ambulance
+                            </button>
+                            <button onclick="clearAllTrafficIncidents()" class="px-2.5 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs font-semibold transition">
+                                Clear Incidents
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Active Emergency HUD Strip -->
+                <div id="active-em-hud" class="hidden glass-panel border border-rose-500/60 bg-rose-950/30 rounded-2xl p-3 flex flex-wrap items-center justify-between gap-2">
+                    <div class="flex items-center gap-3">
+                        <span class="w-3 h-3 rounded-full bg-rose-500 animate-ping"></span>
+                        <div>
+                            <p id="hud-em-title" class="text-xs font-bold text-rose-200">108 AMBULANCE EN ROUTE • GREEN CORRIDOR ACTIVE</p>
+                            <p id="hud-em-sub" class="text-[11px] font-mono text-rose-300">Auto-called 108 & 112 • Priority Green Wave Active</p>
+                        </div>
+                    </div>
+                    <button onclick="openEmergencyModal()" class="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition">
+                        View 108 Dispatch
+                    </button>
+                </div>
+
+                <!-- 3. CORRIDOR DIGITAL TWIN CANVAS + VEHICLE INSPECTOR -->
+                <div class="glass-panel rounded-2xl p-3.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div>
+                            <h3 id="canvas-corridor-heading" class="text-sm font-bold text-white">Corridor Digital Twin — MG Road – Brigade Jn</h3>
+                            <p class="text-[11px] text-slate-400">Click any vehicle to inspect • Live speed badges (km/h) • Directional lane arrows</p>
+                        </div>
+                        <div class="flex items-center gap-2.5 text-[10px] font-mono bg-iccc-900 px-2.5 py-1 rounded-lg border border-slate-800">
+                            <span class="text-emerald-400">● NORMAL</span>
+                            <span class="text-rose-400">● OVERSPEED</span>
+                            <span class="text-amber-400">● STOPPED</span>
+                            <span class="text-cyan-400">🚑 108</span>
+                        </div>
+                    </div>
+
+                    <div id="road-canvas-wrap" class="relative w-full h-[380px] sm:h-[420px] rounded-xl overflow-hidden bg-[#080C16] border border-slate-800 cursor-pointer">
+                        <canvas id="roadTwinCanvas"></canvas>
+                    </div>
+
+                    <!-- Click-to-Inspect Vehicle Telemetry Bar -->
+                    <div id="vehicle-inspector-bar" class="mt-2.5 p-2.5 rounded-xl bg-iccc-900/95 border border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                            <span id="insp-title" class="font-bold text-white">INSPECTOR: VEH-01 (CAR)</span>
+                            <span id="insp-plate" class="px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 text-[10px]">KA-01-MG-1041</span>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-4 text-[11px]">
+                            <span>SPEED: <strong id="insp-speed" class="text-emerald-400">36 km/h</strong></span>
+                            <span>ROUTE: <strong id="insp-corridor" class="text-slate-200">MG Road Main</strong></span>
+                            <span>STATUS: <strong id="insp-status" class="text-emerald-400">COMPLIANT</strong></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 4. LIVE VEHICLE SPEED & VIOLATION TABLE -->
+                <div class="glass-panel rounded-2xl p-3.5">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <h3 class="text-xs font-bold text-white">Live Corridor Vehicle Speed & Telemetry</h3>
+                        <div class="flex flex-wrap gap-1">
+                            <button onclick="setSpeedFilter('ALL')" class="spd-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">ALL</button>
+                            <button onclick="setSpeedFilter('OVERSPEED')" class="spd-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-rose-300">OVERSPEED</button>
+                            <button onclick="setSpeedFilter('EMERGENCY')" class="spd-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-cyan-300">108 / EMS</button>
+                            <button onclick="setSpeedFilter('STOPPED')" class="spd-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-amber-300">STOPPED</button>
+                        </div>
+                    </div>
+                    <div class="max-h-36 overflow-y-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="text-[10px] font-mono uppercase text-slate-400 border-b border-slate-800 sticky top-0 bg-iccc-800">
+                                <tr>
+                                    <th class="py-1.5 px-2">Vehicle / Plate</th>
+                                    <th class="py-1.5 px-2">Type</th>
+                                    <th class="py-1.5 px-2">Route / Lane</th>
+                                    <th class="py-1.5 px-2">Live Speed</th>
+                                    <th class="py-1.5 px-2">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vehicle-speed-tbody" class="divide-y divide-slate-800/60 font-mono text-[11px]"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 5. 6-HOUR FORECAST CHART + CORRIDOR STATS -->
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+                    <div class="md:col-span-8 glass-panel rounded-2xl p-3.5">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <h3 class="text-xs font-bold text-white">6-Hour Corridor Congestion & Avg Speed Forecast</h3>
+                            <span class="text-[10px] font-mono text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded">LSTM Forecast</span>
+                        </div>
+                        <div class="h-40 w-full">
+                            <canvas id="lstmTrafficChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-4 glass-panel rounded-2xl p-3.5 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-xs font-bold text-white mb-2">Corridor Metrics</h3>
+                            <div class="space-y-2 text-xs">
+                                <div class="glass-card p-2 rounded-xl flex justify-between">
+                                    <span class="text-slate-400">Avg Speed:</span>
+                                    <span id="stat-avg-speed" class="font-mono font-bold text-cyan-400">36 km/h</span>
+                                </div>
+                                <div class="glass-card p-2 rounded-xl flex justify-between">
+                                    <span class="text-slate-400">Primary Queue:</span>
+                                    <span id="stat-ns-queue" class="font-mono font-bold text-white">3 veh</span>
+                                </div>
+                                <div class="glass-card p-2 rounded-xl flex justify-between">
+                                    <span class="text-slate-400">Cross/Merge Queue:</span>
+                                    <span id="stat-ew-queue" class="font-mono font-bold text-white">4 veh</span>
+                                </div>
+                                <div class="glass-card p-2 rounded-xl flex justify-between">
+                                    <span class="text-slate-400">Overspeed Flags:</span>
+                                    <span id="stat-overspeed-cnt" class="font-mono font-bold text-rose-400">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========================================================= -->
+            <!-- MODULE B: SMART PARKING & EV CHARGING PREDICTION          -->
+            <!-- ========================================================= -->
+            <section id="mod-parking" class="module-section hidden space-y-4">
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    <div class="lg:col-span-7 glass-panel rounded-2xl p-4 flex flex-col justify-between">
+                        <div>
+                            <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                <div>
+                                    <h2 class="text-sm font-bold text-white">ML Parking & EV Demand Horizon (+0h to +12h)</h2>
+                                    <p class="text-[11px] text-slate-400">Dynamic tariff engine, EV fast-charger kW & event/weather load</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    <select id="pk-event-select" onchange="onParkingContextChange()" class="bg-iccc-900 border border-slate-700 rounded-lg px-2 py-1 text-[10px] font-mono text-amber-300">
+                                        <option value="normal">Normal Day</option>
+                                        <option value="event">Concert / Cricket (+18%)</option>
+                                        <option value="rain">Monsoon Rain (+12%)</option>
+                                    </select>
+                                    <span id="pk-horizon-label" class="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">+0h (Live)</span>
+                                </div>
+                            </div>
+                            <div class="mt-2.5">
+                                <input type="range" min="0" max="12" value="0" oninput="onParkingSliderChange(this.value)" class="w-full">
+                                <div class="flex justify-between text-[10px] font-mono text-slate-400 mt-1">
+                                    <span>Now</span><span>+3h</span><span>+6h (Peak)</span><span>+9h</span><span>+12h</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="h-32 w-full mt-3">
+                            <canvas id="parkingForecastChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-5 glass-panel rounded-2xl p-4 flex flex-col justify-between">
+                        <div>
+                            <h3 class="text-sm font-bold text-white">AI Smart Spot & EV Recommender</h3>
+                            <p class="text-[11px] text-slate-400 mt-0.5">Select hub & charger tier for 1-click booking</p>
+                            <div class="mt-3 space-y-2">
+                                <select id="pk-dest-select" class="w-full bg-iccc-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                                    <option value="MG Road">Destination: MG Road & Brigade</option>
+                                    <option value="Koramangala">Destination: Koramangala / ORR</option>
+                                    <option value="Indiranagar">Destination: Indiranagar 100ft</option>
+                                    <option value="Electronic City">Destination: Electronic City Hub</option>
+                                </select>
+                                <div class="flex gap-2">
+                                    <select id="pk-type-select" class="flex-1 bg-iccc-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none">
+                                        <option value="EV">120kW DC Fast Charger</option>
+                                        <option value="STD">Standard Covered Bay</option>
+                                    </select>
+                                    <button onclick="findAndBookOptimalSpot()" class="px-3.5 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shrink-0">
+                                        1-Click Book
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3 p-2.5 rounded-xl bg-emerald-950/30 border border-emerald-500/30 text-xs">
+                            <p id="pk-ai-pick-title" class="font-bold text-emerald-300">Best Match: MG Road Multi-Level</p>
+                            <p id="pk-ai-pick-sub" class="text-[11px] text-slate-300 mt-0.5">120kW DC chargers ready • Dynamic tariff active</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="parking-hubs-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5"></div>
+            </section>
+
+            <!-- ========================================================= -->
+            <!-- MODULE C: AI WASTE MANAGEMENT & AUTONOMOUS FLEET ROUTING  -->
+            <!-- ========================================================= -->
+            <section id="mod-waste" class="module-section hidden space-y-4">
+                <div class="glass-panel rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2.5">
+                    <div>
+                        <h2 class="text-sm font-bold text-white">IoT Smart Bins, Solar Compactors & EV Fleet Routing</h2>
+                        <p class="text-[11px] text-slate-400">Wet/Dry/Hazardous/E-Waste telemetry, CH₄ ppm & Temp gauges, and EV route optimizer</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <select id="waste-health-filter" onchange="renderWasteBins()" class="bg-iccc-900 border border-slate-700 rounded-xl px-2.5 py-1.5 text-xs font-mono text-cyan-300">
+                            <option value="ALL">All 12 Bins</option>
+                            <option value="CRITICAL">Critical Fill (≥75%)</option>
+                            <option value="GAS">High CH₄ / Temp</option>
+                            <option value="SOLAR">Solar Compactor</option>
+                        </select>
+                        <button onclick="triggerFestivalWaste()" class="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold transition">
+                            Festival Spike
+                        </button>
+                        <button onclick="triggerMethaneAlert()" class="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/40 text-rose-300 text-xs font-semibold transition">
+                            Methane Spike
+                        </button>
+                        <button onclick="runWasteRouteOptimizer()" class="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition shadow-lg shadow-emerald-500/20">
+                            Optimize EV Route
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+                    <div class="lg:col-span-6 glass-panel rounded-2xl p-3.5 flex flex-col">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-xs font-bold text-white">Live EV Collection Truck Path (TSP AI)</span>
+                            <span id="waste-truck-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300">EV-COMPACTOR-01</span>
+                        </div>
+                        <div id="waste-map-wrap" class="relative w-full h-[310px] rounded-xl overflow-hidden bg-iccc-950 border border-slate-800">
+                            <canvas id="wasteFleetCanvas"></canvas>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 mt-3 text-center">
+                            <div class="glass-card p-2 rounded-xl">
+                                <span class="text-[10px] text-slate-400 block">Distance Saved</span>
+                                <span id="w-stat-dist" class="font-mono font-bold text-cyan-400 text-xs">-31.4% (9.8 km)</span>
+                            </div>
+                            <div class="glass-card p-2 rounded-xl">
+                                <span class="text-[10px] text-slate-400 block">Fuel Saved</span>
+                                <span id="w-stat-fuel" class="font-mono font-bold text-emerald-400 text-xs">14.2 Liters</span>
+                            </div>
+                            <div class="glass-card p-2 rounded-xl">
+                                <span class="text-[10px] text-slate-400 block">CO₂ Avoided</span>
+                                <span id="w-stat-co2" class="font-mono font-bold text-amber-400 text-xs">32.6 kg</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-6 glass-panel rounded-2xl p-3.5">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <h3 class="text-xs font-bold text-white">Smart Bin Telemetry & Gauges</h3>
+                            <span class="text-[10px] font-mono text-slate-400">W • D • H • E-Waste</span>
+                        </div>
+                        <div id="waste-bins-container" class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-[375px] overflow-y-auto pr-1"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========================================================= -->
+            <!-- MODULE D: AI SURVEILLANCE, ANPR & CROWD ANALYTICS         -->
+            <!-- ========================================================= -->
+            <section id="mod-surveillance" class="module-section hidden space-y-4">
+                <div class="glass-panel rounded-2xl p-3.5 flex flex-wrap items-center justify-between gap-2.5">
+                    <div>
+                        <h2 class="text-sm font-bold text-white">YOLOv9 Vision Matrix: ANPR, Crowd Heatmap & Fire/Smoke</h2>
+                        <p class="text-[11px] text-slate-400">Click any camera feed to focus • Alerts pushed to Notification Center</p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="simulateANPRViolation('No Helmet')" class="px-2.5 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-300 text-xs font-semibold transition">
+                            Helmet / Lane
+                        </button>
+                        <button onclick="simulateANPRViolation('Crowd Stampede Risk')" class="px-2.5 py-1.5 rounded-xl bg-violet-500/15 hover:bg-violet-500/25 border border-violet-500/40 text-violet-300 text-xs font-semibold transition">
+                            Crowd Density
+                        </button>
+                        <button onclick="simulateANPRViolation('Fire / Smoke Alert')" class="px-2.5 py-1.5 rounded-xl bg-rose-600/20 hover:bg-rose-600/35 border border-rose-500/50 text-rose-300 text-xs font-semibold transition">
+                            Fire / Smoke
+                        </button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                    <div onclick="openCameraFocusModal(0)" class="glass-panel rounded-2xl p-3 cursor-pointer hover:border-violet-500/50 transition">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[11px] font-mono font-bold text-white"><span class="text-rose-500">●</span> CAM-01 • Silk Board ANPR</span>
+                            <span id="cam-status-0" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">PLATE OCR OK</span>
+                        </div>
+                        <div class="relative w-full h-40 rounded-xl overflow-hidden bg-iccc-950 border border-slate-800">
+                            <canvas id="cctvCanvas0"></canvas>
+                        </div>
+                    </div>
+
+                    <div onclick="openCameraFocusModal(1)" class="glass-panel rounded-2xl p-3 cursor-pointer hover:border-violet-500/50 transition">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[11px] font-mono font-bold text-white"><span class="text-rose-500">●</span> CAM-02 • Brigade Crowd Heatmap</span>
+                            <span id="cam-status-1" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">DENSITY LOW</span>
+                        </div>
+                        <div class="relative w-full h-40 rounded-xl overflow-hidden bg-iccc-950 border border-slate-800">
+                            <canvas id="cctvCanvas1"></canvas>
+                        </div>
+                    </div>
+
+                    <div onclick="openCameraFocusModal(2)" class="glass-panel rounded-2xl p-3 cursor-pointer hover:border-violet-500/50 transition">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[11px] font-mono font-bold text-white"><span class="text-rose-500">●</span> CAM-03 • ORR Helmet & Speed</span>
+                            <span id="cam-status-2" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">RADAR SYNC</span>
+                        </div>
+                        <div class="relative w-full h-40 rounded-xl overflow-hidden bg-iccc-950 border border-slate-800">
+                            <canvas id="cctvCanvas2"></canvas>
+                        </div>
+                    </div>
+
+                    <div onclick="openCameraFocusModal(3)" class="glass-panel rounded-2xl p-3 cursor-pointer hover:border-violet-500/50 transition">
+                        <div class="flex items-center justify-between mb-1.5">
+                            <span class="text-[11px] font-mono font-bold text-white"><span class="text-rose-500">●</span> CAM-04 • Metro Thermal / Fire</span>
+                            <span id="cam-status-3" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400">THERMAL OK</span>
+                        </div>
+                        <div class="relative w-full h-40 rounded-xl overflow-hidden bg-iccc-950 border border-slate-800">
+                            <canvas id="cctvCanvas3"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-panel rounded-2xl p-3.5">
+                    <div class="flex items-center justify-between mb-2">
+                        <h3 class="text-xs font-bold text-white">Automated ANPR & E-Challan Ledger</h3>
+                        <span id="echallan-count" class="text-[10px] font-mono text-amber-300">3 Tickets Issued</span>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs">
+                            <thead class="text-[10px] font-mono uppercase text-slate-400 border-b border-slate-800">
+                                <tr>
+                                    <th class="py-2 px-2">Challan ID</th>
+                                    <th class="py-2 px-2">Plate OCR</th>
+                                    <th class="py-2 px-2">Violation</th>
+                                    <th class="py-2 px-2">Location</th>
+                                    <th class="py-2 px-2">Fine</th>
+                                    <th class="py-2 px-2">Dispatch</th>
+                                </tr>
+                            </thead>
+                            <tbody id="echallan-tbody" class="divide-y divide-slate-800/60 font-mono text-[11px]"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- RIGHT PERSISTENT SIDEBAR: LIVE TELEMETRY & NEURAL LOG (3 Columns on XL) -->
+        <aside class="xl:col-span-3 flex flex-col">
+            <div class="glass-panel rounded-2xl p-3.5 flex-1 flex flex-col min-h-[540px] max-h-[860px]">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-2.5">
+                    <div>
+                        <h2 class="text-xs font-bold text-white flex items-center gap-2">
+                            <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                            Live Telemetry & AI Log
+                        </h2>
+                        <p class="text-[10px] text-slate-400">Real-time sensor & model stream</p>
+                    </div>
+                    <button onclick="clearNeuralStream()" class="text-[10px] font-mono text-slate-400 hover:text-white px-2 py-1 rounded bg-slate-800">Clear</button>
+                </div>
+
+                <div class="flex flex-wrap gap-1 mb-2.5">
+                    <button onclick="setStreamFilter('ALL')" class="stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">ALL</button>
+                    <button onclick="setStreamFilter('TRAFFIC')" class="stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-400">TRAFFIC</button>
+                    <button onclick="setStreamFilter('PARKING')" class="stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-400">PARKING</button>
+                    <button onclick="setStreamFilter('WASTE')" class="stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-400">WASTE</button>
+                    <button onclick="setStreamFilter('VISION')" class="stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-400">VISION</button>
+                </div>
+
+                <div id="neural-stream-list" class="flex-1 overflow-y-auto space-y-2 pr-1 font-mono text-[10px]"></div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- AI CITY COPILOT DRAWER                                    -->
+    <!-- ========================================================= -->
+    <div id="copilot-panel" class="hidden fixed inset-y-0 right-0 z-50 w-full sm:w-[400px] glass-panel border-l border-violet-500/40 shadow-2xl flex flex-col">
+        <div class="p-4 border-b border-slate-800 bg-iccc-900/95 flex items-center justify-between">
+            <div>
+                <h3 class="text-sm font-bold text-white">NexusCity AI Copilot</h3>
+                <p class="text-[10px] font-mono text-violet-300">Corridors, Speeds, 108, EV, Waste & ANPR</p>
+            </div>
+            <button onclick="toggleCopilot()" class="text-slate-400 hover:text-white p-1.5">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+
+        <div class="p-2.5 bg-iccc-950/70 border-b border-slate-800 flex flex-wrap gap-1.5">
+            <button onclick="sendQuickPrompt('Give me a live status report for the active road corridor, speeds, and alerts.')" class="text-[10px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-violet-600/30 text-slate-300 border border-slate-700">
+                Corridor & Speed Brief
+            </button>
+            <button onclick="sendQuickPrompt('Dispatch 108 ambulance and explain the green corridor.')" class="text-[10px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-violet-600/30 text-slate-300 border border-slate-700">
+                108 Green Wave
+            </button>
+            <button onclick="sendQuickPrompt('Summarize EV parking availability and critical waste bins.')" class="text-[10px] px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-violet-600/30 text-slate-300 border border-slate-700">
+                EV Parking & Waste
+            </button>
+        </div>
+
+        <div id="copilot-chat-box" class="flex-1 overflow-y-auto p-3.5 space-y-3 text-xs">
+            <div class="p-3 rounded-xl bg-violet-950/35 border border-violet-500/30 text-slate-200 leading-relaxed">
+                Namaskara Operator. Ask me about the active road corridor, vehicle speeds, 108 emergency dispatch, EV parking, smart bins, or ANPR alerts.
+            </div>
+        </div>
+
+        <form onsubmit="submitCopilotQuery(event)" class="p-3 border-t border-slate-800 bg-iccc-900 flex gap-2">
+            <input type="text" id="copilot-input" placeholder="Ask about active road, speeds, 108, EV..." class="flex-1 bg-iccc-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-violet-500">
+            <button type="submit" class="px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white font-bold text-xs transition">
+                Ask
+            </button>
+        </form>
+    </div>
+
+    <!-- ========================================================= -->
+    <!-- JAVASCRIPT SIMULATION, 4-CORRIDOR SWITCHER & ERROR GUARD   -->
+    <!-- ========================================================= -->
+    <script>
+        // 0. SAFE GLOBAL ERROR GUARDS (Never freezes canvas or UI)
+        function showRuntimeGuard(msg) {
+            const bar = document.getElementById('runtime-guard-bar');
+            const txt = document.getElementById('runtime-guard-msg');
+            if (bar && txt) {
+                txt.textContent = `Safe recovery guard: ${msg}`;
+                bar.classList.remove('hidden');
+            }
+        }
+
+        window.onerror = function (message, source, lineno) {
+            showRuntimeGuard(`${message} (line ${lineno || 0})`);
+            return true;
+        };
+
+        window.addEventListener('unhandledrejection', function (event) {
+            const reason = event && event.reason ? (event.reason.message || String(event.reason)) : 'Async event handled';
+            showRuntimeGuard(reason);
+        });
+
+        // 1. CORRIDOR DEFINITIONS (4 Switchable Bengaluru Corridors)
+        const roadCorridors = {
+            mg_road: {
+                id: 'mg_road',
+                shortName: 'MG Road',
+                title: 'MG Road – Brigade Jn (4-Way Signal)',
+                desc: 'Urban commercial core • High pedestrian crosswalk activity • 40 km/h zone',
+                speedLimit: 40,
+                layoutType: 'intersection', // 4-way signalized crossroad
+                lanesPerDir: 2,
+                hasBusLane: false,
+                hasTollGantry: false,
+                waypoints: 'Waypoints: Trinity → Brigade Jn → Anil Kumble',
+                blocks: [
+                    { x: 18, y: 18, w: 280, h: 145, title: 'MG ROAD METRO', sub: 'Transit & EV Deck', accent: '#06B6D4' },
+                    { x: 402, y: 18, w: 280, h: 145, title: 'ST. MARTHA\'S TRAUMA', sub: '108 Hospital Link', accent: '#F43F5E' },
+                    { x: 18, y: 267, w: 280, h: 145, title: 'CUBBON CIVIC ZONE', sub: 'Crosswalk & Parks', accent: '#10B981' },
+                    { x: 402, y: 267, w: 280, h: 145, title: 'BRIGADE RETAIL HUB', sub: 'ANPR & Crowd Grid', accent: '#A855F7' }
+                ],
+                hospital: 'St. Martha\'s Trauma & Emergency Hospital (1.8 km)'
+            },
+            orr_bellandur: {
+                id: 'orr_bellandur',
+                shortName: 'ORR Flyover',
+                title: 'Outer Ring Road – Bellandur Flyover (6-Lane Expressway)',
+                desc: 'High-speed multi-lane arterial expressway • Elevated flyover & merge lanes • 80 km/h',
+                speedLimit: 80,
+                layoutType: 'expressway_merge', // Multi-lane highway with merge ramp
+                lanesPerDir: 3,
+                hasBusLane: false,
+                hasTollGantry: false,
+                waypoints: 'Waypoints: EcoSpace → Bellandur Flyover → Iblur Merge',
+                blocks: [
+                    { x: 20, y: 16, w: 315, h: 125, title: 'ECOSPACE TECH PARK', sub: 'Peak Commute Corridor', accent: '#06B6D4' },
+                    { x: 365, y: 16, w: 315, h: 125, title: 'SAKRA TRAUMA CENTER', sub: '108 Rapid Response', accent: '#F43F5E' },
+                    { x: 20, y: 290, w: 315, h: 124, title: 'BELLANDUR LAKE BELT', sub: 'Merge Ramp Telemetry', accent: '#10B981' },
+                    { x: 365, y: 290, w: 315, h: 124, title: 'IBLUR JUNCTION', sub: 'Radar Speed Enforcement', accent: '#F59E0B' }
+                ],
+                hospital: 'Sakra World Trauma & Emergency Center (2.4 km)'
+            },
+            indiranagar_100ft: {
+                id: 'indiranagar_100ft',
+                shortName: '100ft Rd',
+                title: 'Indiranagar 100ft Rd – CMH Jn (Arterial Corridor)',
+                desc: 'Bustling dining & retail corridor • Bus priority lane & turn pockets • 50 km/h',
+                speedLimit: 50,
+                layoutType: 'arterial_bus', // Arterial corridor with bus lane & turn pocket
+                lanesPerDir: 2,
+                hasBusLane: true,
+                hasTollGantry: false,
+                waypoints: 'Waypoints: Domlur Flyover → 100ft Main → CMH Metro',
+                blocks: [
+                    { x: 18, y: 18, w: 280, h: 145, title: 'INDIRANAGAR METRO', sub: 'Green Line Feeder', accent: '#10B981' },
+                    { x: 402, y: 18, w: 280, h: 145, title: 'MANIPAL HOSPITAL', sub: '108 Priority Corridor', accent: '#F43F5E' },
+                    { x: 18, y: 267, w: 280, h: 145, title: '100FT COMMERCIAL ROW', sub: 'Bus Lane & Parking', accent: '#06B6D4' },
+                    { x: 402, y: 267, w: 280, h: 145, title: 'CMH ROAD JUNCTION', sub: 'Turn Pocket Signals', accent: '#A855F7' }
+                ],
+                hospital: 'Manipal Trauma & Emergency Care (2.1 km)'
+            },
+            ecity_elevated: {
+                id: 'ecity_elevated',
+                shortName: 'E-City Toll',
+                title: 'Electronic City Elevated – Toll Plaza (High-Speed Corridor)',
+                desc: 'Long-haul express corridor • FASTag toll gantry & fast overtake lanes • 80 km/h',
+                speedLimit: 80,
+                layoutType: 'express_toll', // High-speed expressway with toll gantry
+                lanesPerDir: 3,
+                hasBusLane: false,
+                hasTollGantry: true,
+                waypoints: 'Waypoints: Silk Board Ramp → Elevated Deck → E-City Toll',
+                blocks: [
+                    { x: 20, y: 16, w: 315, h: 125, title: 'ELEVATED EXPRESSWAY', sub: 'High-Speed Telemetry', accent: '#06B6D4' },
+                    { x: 365, y: 16, w: 315, h: 125, title: 'NARAYANA HEALTH CITY', sub: '108 Express Lifeline', accent: '#F43F5E' },
+                    { x: 20, y: 290, w: 315, h: 124, title: 'FASTAG GANTRY ZONE', sub: 'Automated Toll & OCR', accent: '#F59E0B' },
+                    { x: 365, y: 290, w: 315, h: 124, title: 'ELECTRONIC CITY PHASE 1', sub: 'IT Campus Exit', accent: '#10B981' }
+                ],
+                hospital: 'Narayana Health Trauma & Emergency Hub (3.2 km)'
+            }
+        };
+
+        // 2. GLOBAL STATE
+        const state = {
+            activeCorridorId: 'mg_road',
+            routeHighlight: 'ALL', // 'ALL', 'PRIMARY', 'SECONDARY', 'EMS'
+            autopilot: true,
+            adaptiveSignals: true,
+            speedLimitKmh: 40,
+            showSpeedBadges: true,
+            speedFilter: 'ALL',
+            selectedVehicleId: 0,
+            overspeedCount: 0,
+
+            activeModule: 'traffic',
+            streamFilter: 'ALL',
+            notifFilter: 'ALL',
+            tick: 0,
+            simTimeSec: 19 * 3600 + 15 * 60,
+            interventions: 142,
+            co2Saved: 418.5,
+            rushHour: false,
+
+            signalPhase: 'NS_GREEN',
+            signalTimer: 14,
+
+            accident: null,
+            ambulance: null,
+
+            parkingHorizon: 0,
+            parkingContext: 'normal',
+
+            wasteRouteActive: true,
+            truckProgress: 0,
+            truckLeg: 0,
+
+            camAlerts: [null, null, null, null],
+            focusedCamIdx: null
+        };
+
+        // 3. DATA COLLECTIONS
+        const roadVehicles = [];
+        const notifications = [];
+        const streamLogs = [];
+        let lastCanvasHitboxes = [];
+        let lstmChart = null;
+        let parkingChart = null;
+
+        const parkingHubs = [
+            { id: 'PK-01', name: 'MG Road Multi-Level',    area: 'MG Road',         total: 260, evTotal: 24, kw: '120kW DC', baseOcc: 62, baseRate: 50 },
+            { id: 'PK-02', name: 'ORR EcoSpace Hub',       area: 'Koramangala',     total: 340, evTotal: 36, kw: '150kW DC', baseOcc: 68, baseRate: 60 },
+            { id: 'PK-03', name: 'Indiranagar 100ft Deck', area: 'Indiranagar',     total: 220, evTotal: 20, kw: '60kW DC',  baseOcc: 54, baseRate: 40 },
+            { id: 'PK-04', name: 'Brigade Plaza Bay',      area: 'MG Road',         total: 300, evTotal: 18, kw: '60kW DC',  baseOcc: 74, baseRate: 70 },
+            { id: 'PK-05', name: 'E-City Toll Express P1', area: 'Electronic City', total: 480, evTotal: 48, kw: '180kW DC', baseOcc: 59, baseRate: 80 },
+            { id: 'PK-06', name: 'Cubbon Civic Plaza',     area: 'MG Road',         total: 180, evTotal: 16, kw: '50kW AC/DC',baseOcc: 47, baseRate: 40 }
+        ];
+
+        const smartBins = [
+            { id: 'BIN-01', zone: 'MG Road Metro',    fill: 46, wet: 48, dry: 38, haz: 8,  ewaste: 6,  methane: 14, temp: 29, solar: true,  nx: 0.16, ny: 0.22 },
+            { id: 'BIN-02', zone: 'Brigade Plaza',    fill: 79, wet: 52, dry: 34, haz: 9,  ewaste: 5,  methane: 22, temp: 31, solar: true,  nx: 0.36, ny: 0.18 },
+            { id: 'BIN-03', zone: 'Bellandur ORR',    fill: 84, wet: 45, dry: 40, haz: 8,  ewaste: 7,  methane: 26, temp: 32, solar: true,  nx: 0.62, ny: 0.20 },
+            { id: 'BIN-04', zone: 'Indiranagar 100ft', fill: 52, wet: 40, dry: 46, haz: 7,  ewaste: 7,  methane: 15, temp: 28, solar: false, nx: 0.84, ny: 0.24 },
+            { id: 'BIN-05', zone: 'Silk Board Hub',   fill: 68, wet: 50, dry: 36, haz: 8,  ewaste: 6,  methane: 19, temp: 30, solar: true,  nx: 0.20, ny: 0.52 },
+            { id: 'BIN-06', zone: 'E-City Toll Gate', fill: 41, wet: 44, dry: 44, haz: 6,  ewaste: 6,  methane: 12, temp: 27, solar: true,  nx: 0.45, ny: 0.48 },
+            { id: 'BIN-07', zone: 'Iblur Merge Zone', fill: 88, wet: 55, dry: 28, haz: 10, ewaste: 7,  methane: 31, temp: 34, solar: false, nx: 0.72, ny: 0.50 },
+            { id: 'BIN-08', zone: 'Whitefield ITPL',  fill: 59, wet: 38, dry: 46, haz: 7,  ewaste: 9,  methane: 17, temp: 29, solar: true,  nx: 0.86, ny: 0.76 },
+            { id: 'BIN-09', zone: 'Jayanagar 4th',    fill: 37, wet: 48, dry: 42, haz: 6,  ewaste: 4,  methane: 11, temp: 27, solar: true,  nx: 0.18, ny: 0.80 },
+            { id: 'BIN-10', zone: 'KR Market Zone',   fill: 82, wet: 62, dry: 25, haz: 8,  ewaste: 5,  methane: 28, temp: 33, solar: false, nx: 0.42, ny: 0.82 },
+            { id: 'BIN-11', zone: 'Cubbon Park',      fill: 31, wet: 58, dry: 32, haz: 5,  ewaste: 5,  methane: 10, temp: 26, solar: true,  nx: 0.64, ny: 0.78 },
+            { id: 'BIN-12', zone: 'CMH Metro Node',   fill: 64, wet: 49, dry: 38, haz: 7,  ewaste: 6,  methane: 18, temp: 29, solar: true,  nx: 0.85, ny: 0.52 }
+        ];
+
+        const eChallans = [
+            { id: 'BLR-EC-9041', plate: 'KA-01-MJ-4821', violation: 'Overspeed (62 in 40)', location: 'MG Road Jn',    fine: '₹1,500', status: 'SMS SENT' },
+            { id: 'BLR-EC-9040', plate: 'KA-05-NB-9012', violation: 'No Helmet (Pillion)',   location: '100ft Rd CMH',  fine: '₹1,000', status: 'SMS SENT' },
+            { id: 'BLR-EC-9039', plate: 'KA-03-HT-2219', violation: 'Overspeed (98 in 80)',  location: 'ORR Flyover',   fine: '₹2,000', status: 'SMS SENT' }
+        ];
+
+        // 4. SHARED HELPERS (Clock, Neural Log, Autopilot, Module Tab Switcher)
+        function fmtClock(sec) {
+            const h = String(Math.floor(sec / 3600) % 24).padStart(2, '0');
+            const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+            const s = String(Math.floor(sec % 60)).padStart(2, '0');
+            return `${h}:${m}:${s}`;
+        }
+
+        function bumpIntervention(co2Add = 0.4) {
+            state.interventions++;
+            state.co2Saved = Number((state.co2Saved + co2Add).toFixed(1));
+            const iEl = document.getElementById('kpi-interventions');
+            const cEl = document.getElementById('kpi-co2');
+            if (iEl) iEl.textContent = state.interventions;
+            if (cEl) cEl.textContent = `${state.co2Saved} kg`;
+        }
+
+        function logDecision(moduleTag, prefix, text, conf = '98.0%', tone = 'info') {
+            streamLogs.unshift({
+                id: Date.now() + Math.random(),
+                module: moduleTag,
+                prefix,
+                text,
+                conf,
+                tone,
+                time: fmtClock(state.simTimeSec)
+            });
+            if (streamLogs.length > 45) streamLogs.pop();
+            renderNeuralStream();
+        }
+
+        function setStreamFilter(tag) {
+            state.streamFilter = tag;
+            document.querySelectorAll('.stream-chip').forEach(btn => {
+                const active = btn.textContent === tag;
+                btn.className = active
+                    ? 'stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    : 'stream-chip px-2 py-0.5 rounded text-[9px] font-mono bg-slate-800 text-slate-400';
+            });
+            renderNeuralStream();
+        }
+
+        function clearNeuralStream() {
+            streamLogs.length = 0;
+            renderNeuralStream();
+        }
+
+        function renderNeuralStream() {
+            const list = document.getElementById('neural-stream-list');
+            if (!list) return;
+            const filtered = state.streamFilter === 'ALL'
+                ? streamLogs
+                : streamLogs.filter(item => item.module === state.streamFilter);
+
+            const toneMap = {
+                info: 'text-cyan-400',
+                success: 'text-emerald-400',
+                warn: 'text-amber-400',
+                danger: 'text-rose-400',
+                vision: 'text-violet-400'
+            };
+
+            list.innerHTML = filtered.slice(0, 24).map(item => `
+                <div class="p-2 rounded-xl bg-iccc-900/95 border border-slate-800/90 feed-item">
+                    <div class="flex items-center justify-between text-[9px] text-slate-500 mb-0.5">
+                        <span>[${item.time}] <strong class="text-slate-300">${item.module}</strong></span>
+                        <span class="text-cyan-400/90">Conf ${item.conf}</span>
+                    </div>
+                    <p class="leading-snug text-slate-300">
+                        <span class="font-bold ${toneMap[item.tone] || toneMap.info}">${item.prefix}</span> ${item.text}
+                    </p>
+                </div>
+            `).join('');
+        }
+
+        function toggleMasterAutopilot() {
+            state.autopilot = !state.autopilot;
+            const btn = document.getElementById('autopilot-toggle');
+            const knob = document.getElementById('autopilot-knob');
+            const lbl = document.getElementById('autopilot-label');
+            if (state.autopilot) {
+                btn.classList.replace('bg-slate-700', 'bg-cyan-500');
+                knob.classList.replace('translate-x-1', 'translate-x-5');
+                lbl.textContent = 'ACTIVE';
+                lbl.className = 'text-[9px] font-mono text-cyan-400';
+                logDecision('TRAFFIC', '[AUTOPILOT]', 'Global ICCC Autonomous AI Autopilot ENGAGED.', '99.4%', 'success');
+                pushNotification('EMERGENCY', 'Autopilot Engaged', 'Autonomous AI optimization active across corridors & sensors.', 'success', true);
+            } else {
+                btn.classList.replace('bg-cyan-500', 'bg-slate-700');
+                knob.classList.replace('translate-x-5', 'translate-x-1');
+                lbl.textContent = 'MANUAL';
+                lbl.className = 'text-[9px] font-mono text-amber-400';
+                logDecision('TRAFFIC', '[MANUAL-HUD]', 'Switched to operator manual supervision mode.', '100%', 'warn');
+                pushNotification('EMERGENCY', 'Manual Mode Active', 'Autonomous AI autopilot paused for operator inspection.', 'warn', true);
+            }
+        }
+
+        function switchModule(modKey) {
+            state.activeModule = modKey;
+            document.querySelectorAll('.module-section').forEach(sec => sec.classList.add('hidden'));
+            const activeSec = document.getElementById(`mod-${modKey}`);
+            if (activeSec) activeSec.classList.remove('hidden');
+
+            document.querySelectorAll('.module-nav').forEach(btn => {
+                btn.className = 'module-nav flex-1 xl:flex-initial text-left px-3.5 py-3 rounded-2xl transition flex items-center gap-3 glass-panel text-slate-400 hover:text-white hover:border-slate-700';
+            });
+            const activeBtn = document.getElementById(`nav-${modKey}`);
+            if (activeBtn) {
+                activeBtn.className = 'module-nav flex-1 xl:flex-initial text-left px-3.5 py-3 rounded-2xl transition flex items-center gap-3 bg-cyan-500/15 border border-cyan-500/40 text-white shadow-lg shadow-cyan-500/5';
+            }
+
+            setTimeout(() => {
+                resizeCanvases();
+                if (modKey === 'traffic') renderVehicleSpeedTable();
+                if (modKey === 'parking') renderParkingHubs();
+                if (modKey === 'waste') renderWasteBins();
+                if (modKey === 'surveillance') renderEChallans();
+            }, 40);
+        }
+
+        // 5. NOTIFICATION CENTER & TOAST SYSTEM
+        function pushNotification(category, title, message, severity = 'info', triggerToast = true) {
+            const item = {
+                id: Date.now() + Math.random(),
+                category,
+                title,
+                message,
+                severity,
+                time: fmtClock(state.simTimeSec),
+                unread: true
+            };
+            notifications.unshift(item);
+            if (notifications.length > 50) notifications.pop();
+            updateNotifBadge();
+            renderNotificationDrawer();
+
+            if (triggerToast) {
+                const stack = document.getElementById('toast-stack');
+                if (!stack) return;
+                const borderMap = {
+                    info: 'border-cyan-400',
+                    success: 'border-emerald-400',
+                    warn: 'border-amber-400',
+                    danger: 'border-rose-500'
+                };
+                const toast = document.createElement('div');
+                toast.className = `pointer-events-auto glass-panel border-l-4 ${borderMap[severity] || borderMap.info} px-3.5 py-2.5 rounded-xl shadow-2xl feed-item`;
+                toast.innerHTML = `
+                    <div class="flex items-start gap-2">
+                        <span class="text-[10px] font-mono font-bold text-cyan-300 mt-0.5">[${category}]</span>
+                        <div class="min-w-0">
+                            <h4 class="text-xs font-bold text-white truncate">${title}</h4>
+                            <p class="text-[11px] text-slate-300 leading-snug mt-0.5">${message}</p>
+                        </div>
+                    </div>
+                `;
+                stack.prepend(toast);
+                if (stack.children.length > 3) stack.removeChild(stack.lastChild);
+                setTimeout(() => toast.remove(), 4000);
+            }
+        }
+
+        function updateNotifBadge() {
+            const unread = notifications.filter(n => n.unread).length;
+            const badge = document.getElementById('notif-badge');
+            if (!badge) return;
+            badge.textContent = unread;
+            badge.classList.toggle('hidden', unread === 0);
+        }
+
+        function toggleNotificationDrawer() {
+            const drawer = document.getElementById('notif-drawer');
+            drawer.classList.toggle('hidden');
+            if (!drawer.classList.contains('hidden')) {
+                markAllNotificationsRead();
+            }
+        }
+
+        function markAllNotificationsRead() {
+            notifications.forEach(n => n.unread = false);
+            updateNotifBadge();
+            renderNotificationDrawer();
+        }
+
+        function clearAllNotifications() {
+            notifications.length = 0;
+            updateNotifBadge();
+            renderNotificationDrawer();
+        }
+
+        function setNotifFilter(cat) {
+            state.notifFilter = cat;
+            document.querySelectorAll('.notif-filter-btn').forEach(btn => {
+                const isMatch = btn.id === `nf-${cat}`;
+                btn.className = isMatch
+                    ? 'notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    : 'notif-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-400';
+            });
+            renderNotificationDrawer();
+        }
+
+        function renderNotificationDrawer() {
+            const container = document.getElementById('notif-list');
+            if (!container) return;
+            const filtered = state.notifFilter === 'ALL'
+                ? notifications
+                : notifications.filter(n => n.category === state.notifFilter);
+
+            if (filtered.length === 0) {
+                container.innerHTML = `<p class="text-center text-slate-500 py-8 font-mono text-[11px]">No alerts in ${state.notifFilter}</p>`;
+                return;
+            }
+
+            const badgeCol = {
+                info: 'text-cyan-400 bg-cyan-500/10',
+                success: 'text-emerald-400 bg-emerald-500/10',
+                warn: 'text-amber-400 bg-amber-500/10',
+                danger: 'text-rose-400 bg-rose-500/15'
+            };
+
+            container.innerHTML = filtered.map(n => `
+                <div class="p-2.5 rounded-xl bg-iccc-900/95 border border-slate-800 feed-item">
+                    <div class="flex items-center justify-between text-[10px] font-mono mb-1">
+                        <span class="px-1.5 py-0.5 rounded font-bold ${badgeCol[n.severity] || badgeCol.info}">${n.category}</span>
+                        <span class="text-slate-500">${n.time}</span>
+                    </div>
+                    <p class="font-bold text-white text-xs">${n.title}</p>
+                    <p class="text-[11px] text-slate-300 mt-0.5 leading-relaxed">${n.message}</p>
+                </div>
+            `).join('');
+        }
+
+        // 6. MODULE A: MULTI-ROAD CORRIDOR SWITCHER, ROUTES, SPEEDS & 108/112
+        function switchRoadCorridor(corridorId) {
+            const c = roadCorridors[corridorId];
+            if (!c) return;
+
+            state.activeCorridorId = corridorId;
+            state.speedLimitKmh = c.speedLimit;
+            if (state.accident) state.accident.active = false;
+
+            // Update active button styles
+            Object.keys(roadCorridors).forEach(key => {
+                const btn = document.getElementById(`road-btn-${key}`);
+                if (!btn) return;
+                if (key === corridorId) {
+                    btn.className = 'road-switch-btn text-left p-2.5 rounded-xl border transition bg-cyan-500/15 border-cyan-500/50 text-white';
+                } else {
+                    btn.className = 'road-switch-btn text-left p-2.5 rounded-xl border transition glass-card border-slate-800 text-slate-300 hover:border-slate-700';
+                }
+            });
+
+            document.getElementById('active-corridor-title').textContent = c.title;
+            document.getElementById('active-corridor-desc').textContent = c.desc;
+            document.getElementById('active-corridor-limit-pill').textContent = `LIMIT: ${c.speedLimit} km/h`;
+            document.getElementById('canvas-corridor-heading').textContent = `Corridor Digital Twin — ${c.title}`;
+            document.getElementById('route-waypoints-text').textContent = c.waypoints;
+            document.getElementById('nav-active-road').textContent = c.shortName;
+            document.getElementById('nav-speed-limit').textContent = `${c.speedLimit} km/h`;
+            document.getElementById('em-location').textContent = c.title;
+            document.getElementById('em-hospital-name').textContent = c.hospital;
+
+            initCorridorVehicles(c);
+            updateVehicleInspectorUI();
+            renderVehicleSpeedTable();
+            updateLstmChart();
+
+            bumpIntervention(0.5);
+            logDecision('TRAFFIC', '[CORRIDOR-SWITCH]', `Switched active road to ${c.title} (Speed Limit: ${c.speedLimit} km/h).`, '99.5%', 'info');
+            pushNotification('EMERGENCY', `Corridor Switched: ${c.shortName}`, `${c.title} • Speed limit set to ${c.speedLimit} km/h.`, 'info', true);
+        }
+
+        function setRouteHighlight(mode) {
+            state.routeHighlight = mode;
+            ['ALL', 'PRIMARY', 'SECONDARY', 'EMS'].forEach(m => {
+                const btn = document.getElementById(`route-btn-${m}`);
+                if (!btn) return;
+                btn.className = m === mode
+                    ? 'route-hl-btn px-2.5 py-1 rounded-lg text-[10px] font-mono font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/35'
+                    : 'route-hl-btn px-2.5 py-1 rounded-lg text-[10px] font-mono bg-slate-800 text-slate-300';
+            });
+            if (mode === 'EMS') {
+                dispatch108Ambulance(false);
+            }
+        }
+
+        function initCorridorVehicles(corridor) {
+            roadVehicles.length = 0;
+            const c = corridor || roadCorridors[state.activeCorridorId];
+            const isHighSpeed = c.speedLimit >= 70;
+            const isExpressOnly = c.layoutType === 'expressway_merge' || c.layoutType === 'express_toll';
+
+            const colors = ['#38BDF8', '#F8FAFC', '#FBBF24', '#A78BFA', '#34D399', '#F472B6'];
+            const plates = [
+                'KA-01-MG-1041', 'KA-05-AB-2290', 'KA-03-HT-8812', 'KA-04-MK-5519',
+                'KA-51-EQ-3094', 'KA-01-CD-7120', 'KA-02-ZZ-9941', 'KA-05-TR-4410',
+                'KA-01-NB-6612', 'KA-03-PL-1208', 'KA-04-GH-8340', 'KA-51-VW-2918',
+                'KA-01-JK-5021', 'KA-05-YX-7731', 'KA-02-MN-6184', 'KA-03-RT-9052',
+                'KA-01-SD-3318', 'KA-04-LP-4829', 'KA-51-BC-1940', 'KA-02-QW-8523'
+            ];
+
+            for (let i = 0; i < 20; i++) {
+                // Express corridors focus on East/West primary flow + merge/cross flow
+                const dirs = isExpressOnly ? ['E', 'W', 'E', 'S'] : ['S', 'N', 'E', 'W'];
+                const dir = dirs[i % dirs.length];
+                const lane = i % c.lanesPerDir;
+                const isBus = !isHighSpeed && i % 6 === 0;
+                const isBike = !isExpressOnly && i % 4 === 3;
+
+                // Tailor vehicle speeds to the corridor's speed limit, with occasional overspeeders
+                let baseKmh = isHighSpeed ? (66 + (i % 18)) : (30 + (i % 14));
+                if (i === 2) baseKmh = c.speedLimit + 14; // Deliberate overspeeder to test radar & alerts
+                if (i === 8) baseKmh = c.speedLimit + 9;
+
+                roadVehicles.push({
+                    id: i,
+                    code: `VEH-${String(i + 1).padStart(2, '0')}`,
+                    plate: plates[i % plates.length],
+                    dir,
+                    lane,
+                    pos: (i * 58) % 660,
+                    baseSpeed: (baseKmh / 24),
+                    speedKmh: baseKmh,
+                    len: isBus ? 28 : (isBike ? 11 : 18),
+                    wid: isBus ? 10 : (isBike ? 5 : 9),
+                    color: isBus ? '#0EA5E9' : colors[i % colors.length],
+                    type: isBus ? 'BUS' : (isBike ? 'BIKE' : 'CAR'),
+                    overspeeding: baseKmh > c.speedLimit,
+                    flaggedThisCycle: false
+                });
+            }
+            state.selectedVehicleId = 0;
+        }
+
+        function toggleSpeedOverlay() {
+            state.showSpeedBadges = !state.showSpeedBadges;
+            document.getElementById('speed-overlay-text').textContent = `Speed Tags: ${state.showSpeedBadges ? 'ON' : 'OFF'}`;
+        }
+
+        function setSpeedFilter(mode) {
+            state.speedFilter = mode;
+            document.querySelectorAll('.spd-filter-btn').forEach(btn => {
+                const match = btn.textContent === mode || (mode === 'EMERGENCY' && btn.textContent.includes('108'));
+                btn.className = match
+                    ? 'spd-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
+                    : 'spd-filter-btn px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-slate-300';
+            });
+            renderVehicleSpeedTable();
+        }
+
+        function clearAllTrafficIncidents() {
+            if (state.accident) state.accident.active = false;
+            if (state.ambulance) state.ambulance.active = false;
+            document.getElementById('active-em-hud').classList.add('hidden');
+            closeEmergencyModal();
+            logDecision('TRAFFIC', '[RESET]', 'Cleared active corridor incidents & 108 preemption.', '100%', 'info');
+            pushNotification('EMERGENCY', 'Corridor Clear', 'Active incident & 108 preemption cleared.', 'info', true);
+        }
+
+        function toggleAdaptiveSignals() {
+            state.adaptiveSignals = !state.adaptiveSignals;
+            const btn = document.getElementById('adaptive-sig-btn');
+            const knob = document.getElementById('adaptive-sig-knob');
+            if (state.adaptiveSignals) {
+                btn.classList.replace('bg-slate-700', 'bg-emerald-500');
+                knob.classList.replace('translate-x-1', 'translate-x-5');
+                logDecision('TRAFFIC', '[RL-SIGNAL]', 'Adaptive RL signal timing ENABLED.', '97.9%', 'success');
+                pushNotification('EMERGENCY', 'AI Adaptive Signals ON', 'Dynamic green-wave signal splits active.', 'success', true);
+            } else {
+                btn.classList.replace('bg-emerald-500', 'bg-slate-700');
+                knob.classList.replace('translate-x-5', 'translate-x-1');
+                logDecision('TRAFFIC', '[FIXED-TIMER]', 'Reverted to static 12s signal cycles.', '100%', 'warn');
+            }
+            updateLstmChart();
+        }
+
+        function toggleRushHour() {
+            state.rushHour = !state.rushHour;
+            const btn = document.getElementById('btn-rush');
+            if (state.rushHour) {
+                btn.classList.add('bg-amber-500/35', 'ring-1', 'ring-amber-400');
+                logDecision('TRAFFIC', '[SURGE-DETECT]', 'Peak rush hour surge active on corridor.', '96.5%', 'warn');
+                pushNotification('EMERGENCY', 'Rush Hour Surge', 'Peak traffic load active; AI extending green phases.', 'warn', true);
+            } else {
+                btn.classList.remove('bg-amber-500/35', 'ring-1', 'ring-amber-400');
+            }
+            updateLstmChart();
+        }
+
+        function triggerRoadAccident() {
+            const c = roadCorridors[state.activeCorridorId];
+            state.accident = { active: true, timerSec: 1 };
+            document.getElementById('em-call-timer').textContent = '00:01';
+            document.getElementById('em-eta-badge').textContent = 'ETA 01:45';
+            document.getElementById('active-em-hud').classList.remove('hidden');
+            openEmergencyModal();
+
+            bumpIntervention(2.5);
+            logDecision('TRAFFIC', '[COLLISION-AI]', `CRITICAL ACCIDENT on ${c.shortName}! Auto-dialed 108 Ambulance & 112 Police.`, '99.1%', 'danger');
+            pushNotification('EMERGENCY', `108 & 112 Auto-Dispatched (${c.shortName})`, `Collision detected on ${c.title}. Ambulance KA-01-G-1084 en route.`, 'danger', true);
+            dispatch108Ambulance(true);
+        }
+
+        function openEmergencyModal() {
+            document.getElementById('emergency-dispatch-modal').classList.remove('hidden');
+        }
+
+        function closeEmergencyModal() {
+            document.getElementById('emergency-dispatch-modal').classList.add('hidden');
+        }
+
+        function dispatch108Ambulance(fromAccident = false) {
+            const c = roadCorridors[state.activeCorridorId];
+            state.ambulance = {
+                active: true,
+                phase: fromAccident ? 'TO_SCENE' : 'CORRIDOR_RUN',
+                progress: 0,
+                speedKmh: Math.min(84, c.speedLimit + 18)
+            };
+            state.signalPhase = 'EW_GREEN';
+            state.signalTimer = 25;
+
+            document.getElementById('active-em-hud').classList.remove('hidden');
+            document.getElementById('hud-em-title').textContent = `108 GREEN CORRIDOR ACTIVE • ${c.shortName.toUpperCase()}`;
+
+            if (!fromAccident) {
+                bumpIntervention(1.5);
+                logDecision('TRAFFIC', '[108-PREEMPT]', `108 Green Corridor locked on ${c.title} for KA-01-G-1084.`, '99.5%', 'danger');
+                pushNotification('EMERGENCY', `108 Green Wave (${c.shortName})`, `Ambulance KA-01-G-1084 given priority green corridor.`, 'danger', true);
+            }
+        }
+
+        function updateRoadSimulation() {
+            state.tick++;
+            if (state.tick % 30 === 0) {
+                state.simTimeSec++;
+                const clockStr = fmtClock(state.simTimeSec);
+                const topC = document.getElementById('top-blr-clock');
+                const navC = document.getElementById('nav-clock');
+                if (topC) topC.textContent = clockStr;
+                if (navC) navC.textContent = clockStr;
+
+                if (state.accident && state.accident.active) {
+                    state.accident.timerSec++;
+                    const m = String(Math.floor(state.accident.timerSec / 60)).padStart(2, '0');
+                    const s = String(state.accident.timerSec % 60).padStart(2, '0');
+                    const tEl = document.getElementById('em-call-timer');
+                    if (tEl) tEl.textContent = `${m}:${s}`;
+                }
+            }
+
+            if (state.tick % 60 === 0) {
+                if (state.ambulance && state.ambulance.active) {
+                    state.signalPhase = 'EW_GREEN';
+                    state.signalTimer = 20;
+                } else {
+                    state.signalTimer--;
+                    if (state.signalTimer <= 0) {
+                        if (state.signalPhase === 'NS_GREEN') { state.signalPhase = 'NS_AMBER'; state.signalTimer = 3; }
+                        else if (state.signalPhase === 'NS_AMBER') { state.signalPhase = 'EW_GREEN'; state.signalTimer = state.adaptiveSignals ? 13 : 12; }
+                        else if (state.signalPhase === 'EW_GREEN') { state.signalPhase = 'EW_AMBER'; state.signalTimer = 3; }
+                        else { state.signalPhase = 'NS_GREEN'; state.signalTimer = state.adaptiveSignals ? 14 : 12; }
+                    }
+                }
+            }
+
+            const W = 700, H = 420;
+            const cx = W / 2, cy = H / 2;
+            const stopDist = 66;
+            const c = roadCorridors[state.activeCorridorId];
+            const isExpress = c.layoutType === 'expressway_merge' || c.layoutType === 'express_toll';
+
+            let pQueue = 0, sQueue = 0, speedSum = 0, overCnt = 0;
+            const speedMult = state.rushHour ? 1.08 : 1.0;
+
+            roadVehicles.forEach((v, idx) => {
+                let canMove = true;
+
+                // Expressways keep primary E/W flow moving freely unless accident blocks lane
+                if (!isExpress) {
+                    if (v.dir === 'S') {
+                        const dist = (cy - stopDist) - v.pos;
+                        if (dist > 0 && dist < 24 && state.signalPhase !== 'NS_GREEN') { canMove = false; pQueue++; }
+                    } else if (v.dir === 'N') {
+                        const dist = v.pos - (cy + stopDist);
+                        if (dist > 0 && dist < 24 && state.signalPhase !== 'NS_GREEN') { canMove = false; pQueue++; }
+                    } else if (v.dir === 'E') {
+                        const dist = (cx - stopDist) - v.pos;
+                        if (dist > 0 && dist < 24 && state.signalPhase !== 'EW_GREEN') { canMove = false; sQueue++; }
+                    } else if (v.dir === 'W') {
+                        const dist = v.pos - (cx + stopDist);
+                        if (dist > 0 && dist < 24 && state.signalPhase !== 'EW_GREEN') { canMove = false; sQueue++; }
+                    }
+                }
+
+                if (state.accident && state.accident.active && v.dir === 'E' && v.lane === 0) {
+                    if (Math.abs(v.pos - (cx + 45)) < 58) canMove = false;
+                }
+
+                roadVehicles.forEach((other, oIdx) => {
+                    if (idx === oIdx || v.dir !== other.dir || v.lane !== other.lane) return;
+                    if (v.dir === 'S' || v.dir === 'E') {
+                        const gap = other.pos - v.pos;
+                        if (gap > 0 && gap < v.len + 16) canMove = false;
+                    } else {
+                        const gap = v.pos - other.pos;
+                        if (gap > 0 && gap < v.len + 16) canMove = false;
+                    }
+                });
+
+                if (canMove) {
+                    if (v.dir === 'S') { v.pos += v.baseSpeed * speedMult; if (v.pos > H + 30) { v.pos = -30; v.flaggedThisCycle = false; } }
+                    if (v.dir === 'N') { v.pos -= v.baseSpeed * speedMult; if (v.pos < -30) { v.pos = H + 30; v.flaggedThisCycle = false; } }
+                    if (v.dir === 'E') { v.pos += v.baseSpeed * speedMult; if (v.pos > W + 30) { v.pos = -30; v.flaggedThisCycle = false; } }
+                    if (v.dir === 'W') { v.pos -= v.baseSpeed * speedMult; if (v.pos < -30) { v.pos = W + 30; v.flaggedThisCycle = false; } }
+
+                    const jitter = Math.sin(state.tick * 0.08 + idx) * 2;
+                    v.speedKmh = Math.max(16, Math.round(v.baseSpeed * 24 * speedMult + jitter));
+                } else {
+                    v.speedKmh = 0;
+                }
+
+                v.overspeeding = v.speedKmh > state.speedLimitKmh;
+                if (v.overspeeding) {
+                    overCnt++;
+                    if (!v.flaggedThisCycle && state.tick % 45 === 0) {
+                        v.flaggedThisCycle = true;
+                        state.overspeedCount++;
+                        bumpIntervention(0.2);
+                        pushNotification('SPEED', `Overspeed on ${c.shortName}: ${v.plate}`, `${v.speedKmh} km/h in ${state.speedLimitKmh} km/h zone.`, 'warn', true);
+                    }
+                }
+                speedSum += v.speedKmh;
+            });
+
+            if (state.tick % 30 === 0) {
+                const pEl = document.getElementById('stat-ns-queue');
+                const sEl = document.getElementById('stat-ew-queue');
+                const aEl = document.getElementById('stat-avg-speed');
+                const oEl = document.getElementById('stat-overspeed-cnt');
+                if (pEl) pEl.textContent = `${pQueue} veh`;
+                if (sEl) sEl.textContent = `${sQueue} veh`;
+                if (aEl) aEl.textContent = `${Math.round(speedSum / Math.max(1, roadVehicles.length))} km/h`;
+                if (oEl) oEl.textContent = overCnt;
+                updateVehicleInspectorUI();
+            }
+
+            if (state.tick % 90 === 0 && state.activeModule === 'traffic') {
+                renderVehicleSpeedTable();
+            }
+
+            if (state.ambulance && state.ambulance.active) {
+                state.ambulance.progress += 0.0042;
+                state.ambulance.speedKmh = Math.min(88, c.speedLimit + 16) + Math.round(Math.sin(state.tick * 0.2) * 3);
+                if (state.ambulance.phase === 'TO_SCENE' && state.ambulance.progress >= 0.55) {
+                    state.ambulance.phase = 'TO_HOSPITAL';
+                    if (state.accident) state.accident.active = false;
+                    document.getElementById('hud-em-title').textContent = `PATIENT ONBOARD • TRANSPORTING TO TRAUMA CENTER (${c.shortName})`;
+                    document.getElementById('em-eta-badge').textContent = 'ARRIVING';
+                }
+                if (state.ambulance.progress >= 1.0) {
+                    state.ambulance.active = false;
+                    document.getElementById('active-em-hud').classList.add('hidden');
+                    closeEmergencyModal();
+                    logDecision('TRAFFIC', '[108-COMPLETE]', `108 Ambulance completed priority run on ${c.shortName}.`, '99.8%', 'success');
+                    pushNotification('EMERGENCY', '108 Mission Complete', `Ambulance KA-01-G-1084 reached hospital safely.`, 'success', true);
+                }
+            }
+        }
+
+        function updateVehicleInspectorUI() {
+            const v = roadVehicles.find(item => item.id === state.selectedVehicleId) || roadVehicles[0];
+            if (!v) return;
+            const c = roadCorridors[state.activeCorridorId];
+            document.getElementById('insp-title').textContent = `INSPECTOR: ${v.code} (${v.type})`;
+            document.getElementById('insp-plate').textContent = v.plate;
+            document.getElementById('insp-corridor').textContent = `${c.shortName} (${v.dir}-L${v.lane + 1})`;
+
+            const spdEl = document.getElementById('insp-speed');
+            const stEl = document.getElementById('insp-status');
+            spdEl.textContent = `${v.speedKmh} km/h`;
+
+            if (v.speedKmh === 0) {
+                spdEl.className = 'text-amber-400 font-bold';
+                stEl.textContent = 'STOPPED / QUEUED';
+                stEl.className = 'text-amber-400 font-bold';
+            } else if (v.overspeeding) {
+                spdEl.className = 'text-rose-400 font-bold';
+                stEl.textContent = `OVERSPEED (>${state.speedLimitKmh})`;
+                stEl.className = 'text-rose-400 font-bold';
+            } else {
+                spdEl.className = 'text-emerald-400 font-bold';
+                stEl.textContent = 'COMPLIANT';
+                stEl.className = 'text-emerald-400 font-bold';
+            }
+        }
+
+        function renderVehicleSpeedTable() {
+            const tbody = document.getElementById('vehicle-speed-tbody');
+            if (!tbody) return;
+            const c = roadCorridors[state.activeCorridorId];
+
+            let rows = roadVehicles.map(v => ({
+                id: v.id,
+                code: v.code,
+                plate: v.plate,
+                type: v.type,
+                route: `${c.shortName} • ${v.dir}-L${v.lane + 1}`,
+                speedKmh: v.speedKmh,
+                overspeeding: v.overspeeding,
+                isEm: false
+            }));
+
+            if (state.ambulance && state.ambulance.active) {
+                rows.unshift({
+                    id: 999,
+                    code: '108-EMS',
+                    plate: 'KA-01-G-1084',
+                    type: 'AMBULANCE',
+                    route: `${c.shortName} • EMS`,
+                    speedKmh: state.ambulance.speedKmh,
+                    overspeeding: false,
+                    isEm: true
+                });
+            }
+
+            if (state.speedFilter === 'OVERSPEED') rows = rows.filter(r => r.overspeeding);
+            else if (state.speedFilter === 'EMERGENCY') rows = rows.filter(r => r.isEm);
+            else if (state.speedFilter === 'STOPPED') rows = rows.filter(r => r.speedKmh === 0);
+
+            tbody.innerHTML = rows.slice(0, 10).map(r => {
+                let spdColor = 'text-emerald-400';
+                let stBadge = '<span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px]">NORMAL</span>';
+                if (r.isEm) {
+                    spdColor = 'text-cyan-400';
+                    stBadge = '<span class="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px]">108 PRIORITY</span>';
+                } else if (r.speedKmh === 0) {
+                    spdColor = 'text-amber-400';
+                    stBadge = '<span class="px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-400 text-[10px]">STOPPED</span>';
+                } else if (r.overspeeding) {
+                    spdColor = 'text-rose-400';
+                    stBadge = '<span class="px-1.5 py-0.5 rounded bg-rose-500/20 text-rose-300 text-[10px]">OVERSPEED</span>';
+                }
+
+                return `
+                    <tr onclick="selectVehicleById(${r.id})" class="hover:bg-slate-800/50 cursor-pointer">
+                        <td class="py-1.5 px-2 text-white font-bold">${r.plate}</td>
+                        <td class="py-1.5 px-2 text-slate-300">${r.type}</td>
+                        <td class="py-1.5 px-2 text-slate-400">${r.route}</td>
+                        <td class="py-1.5 px-2 font-bold ${spdColor}">${r.speedKmh} km/h</td>
+                        <td class="py-1.5 px-2">${stBadge}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function selectVehicleById(id) {
+            state.selectedVehicleId = id;
+            updateVehicleInspectorUI();
+        }
+
+        document.getElementById('roadTwinCanvas').addEventListener('click', (e) => {
+            const c = e.currentTarget;
+            const rect = c.getBoundingClientRect();
+            const vx = ((e.clientX - rect.left) / rect.width) * 700;
+            const vy = ((e.clientY - rect.top) / rect.height) * 420;
+
+            for (const hb of lastCanvasHitboxes) {
+                if (vx >= hb.x - 14 && vx <= hb.x + hb.w + 14 && vy >= hb.y - 14 && vy <= hb.y + hb.h + 14) {
+                    state.selectedVehicleId = hb.id;
+                    updateVehicleInspectorUI();
+                    break;
+                }
+            }
+        });
+
+        function drawDirectionalArrows(ctx, cx, cy, roadW, isExpress) {
+            ctx.fillStyle = 'rgba(125, 211, 252, 0.35)';
+            ctx.font = 'bold 11px JetBrains Mono';
+            ctx.textAlign = 'center';
+
+            // Primary East-West Route Arrows
+            for (let x = 90; x <= 610; x += 140) {
+                if (Math.abs(x - cx) < 65) continue;
+                ctx.fillText('→', x, cy + 28);
+                ctx.fillText('←', x, cy - 22);
+            }
+
+            if (!isExpress) {
+                // North-South Cross Route Arrows
+                for (let y = 70; y <= 350; y += 130) {
+                    if (Math.abs(y - cy) < 65) continue;
+                    ctx.fillText('↓', cx - 26, y);
+                    ctx.fillText('↑', cx + 26, y);
+                }
+            }
+        }
+
+        function drawRoadTwinCanvas() {
+            const c = document.getElementById('roadTwinCanvas');
+            if (!c || state.activeModule !== 'traffic') return;
+            const rect = c.parentElement.getBoundingClientRect();
+            const w = rect.width, h = rect.height;
+            if (w <= 0 || h <= 0) return;
+
+            const ctx = c.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+
+            const corridor = roadCorridors[state.activeCorridorId] || roadCorridors.mg_road;
+            const isExpress = corridor.layoutType === 'expressway_merge' || corridor.layoutType === 'express_toll';
+            const roadW = isExpress ? 124 : 104;
+
+            const sx = w / 700, sy = h / 420;
+            ctx.save();
+            ctx.scale(sx, sy);
+
+            const W = 700, H = 420;
+            const cx = W / 2, cy = H / 2;
+
+            ctx.fillStyle = '#090E1A';
+            ctx.fillRect(0, 0, W, H);
+
+            // Landmarks / Blocks
+            corridor.blocks.forEach(b => {
+                ctx.fillStyle = '#0E1628';
+                ctx.strokeStyle = 'rgba(51, 65, 85, 0.55)';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.roundRect(b.x, b.y, b.w, b.h, 12);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.font = 'bold 11px Inter, sans-serif';
+                ctx.fillStyle = b.accent;
+                ctx.textAlign = 'left';
+                ctx.fillText(b.title, b.x + 14, b.y + 24);
+
+                ctx.font = '10px JetBrains Mono, monospace';
+                ctx.fillStyle = '#64748B';
+                ctx.fillText(b.sub, b.x + 14, b.y + 40);
+            });
+
+            // Asphalt Corridors
+            ctx.fillStyle = '#182236';
+            ctx.fillRect(0, cy - roadW / 2, W, roadW);
+            if (!isExpress) {
+                ctx.fillRect(cx - roadW / 2, 0, roadW, H);
+            } else {
+                // Merge / Feeder Connector Road
+                ctx.fillRect(cx - 42, cy + roadW / 2, 84, H - (cy + roadW / 2));
+            }
+
+            // Route Highlight Overlays
+            if (state.routeHighlight === 'PRIMARY' || state.routeHighlight === 'ALL') {
+                ctx.strokeStyle = state.routeHighlight === 'PRIMARY' ? 'rgba(34, 211, 238, 0.55)' : 'rgba(34, 211, 238, 0.16)';
+                ctx.lineWidth = state.routeHighlight === 'PRIMARY' ? 4 : 2;
+                ctx.beginPath();
+                ctx.moveTo(0, cy + 16);
+                ctx.lineTo(W, cy + 16);
+                ctx.stroke();
+            }
+
+            if (state.routeHighlight === 'SECONDARY' && !isExpress) {
+                ctx.strokeStyle = 'rgba(168, 85, 247, 0.55)';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(cx - 16, 0);
+                ctx.lineTo(cx - 16, H);
+                ctx.stroke();
+            }
+
+            if (state.ambulance && state.ambulance.active || state.routeHighlight === 'EMS') {
+                ctx.fillStyle = 'rgba(16, 185, 129, 0.18)';
+                ctx.fillRect(0, cy - roadW / 2, W, roadW);
+            }
+
+            // Bus Lane on Indiranagar 100ft Rd
+            if (corridor.hasBusLane) {
+                ctx.fillStyle = 'rgba(14, 165, 233, 0.22)';
+                ctx.fillRect(0, cy + roadW / 2 - 14, W, 14);
+                ctx.fillStyle = '#38BDF8';
+                ctx.font = 'bold 8px JetBrains Mono';
+                ctx.textAlign = 'left';
+                ctx.fillText('BUS PRIORITY LANE', 14, cy + roadW / 2 - 4);
+            }
+
+            // Toll Gantry on Electronic City Expressway
+            if (corridor.hasTollGantry) {
+                const gx = 520;
+                ctx.strokeStyle = '#F59E0B';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(gx, cy - roadW / 2 - 6);
+                ctx.lineTo(gx, cy + roadW / 2 + 6);
+                ctx.stroke();
+                ctx.fillStyle = '#F59E0B';
+                ctx.font = 'bold 9px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.fillText('FASTAG GANTRY', gx, cy - roadW / 2 - 10);
+            }
+
+            // Center Divider & Dashed Lane Lines
+            ctx.strokeStyle = '#F59E0B';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(0, cy); ctx.lineTo(W, cy);
+            ctx.stroke();
+
+            ctx.strokeStyle = 'rgba(226, 232, 240, 0.35)';
+            ctx.lineWidth = 1.2;
+            ctx.setLineDash([10, 10]);
+            [-24, 24].forEach(off => {
+                ctx.beginPath();
+                ctx.moveTo(0, cy + off); ctx.lineTo(W, cy + off);
+                ctx.stroke();
+            });
+            ctx.setLineDash([]);
+
+            if (!isExpress) {
+                // Zebra Crosswalks for MG Road & Indiranagar
+                ctx.fillStyle = 'rgba(248, 250, 252, 0.55)';
+                for (let i = -40; i <= 34; i += 12) {
+                    ctx.fillRect(cx + i, cy - roadW / 2 - 11, 6, 9);
+                    ctx.fillRect(cx + i, cy + roadW / 2 + 2, 6, 9);
+                }
+
+                // Signal Pill
+                const ewColor = state.signalPhase === 'EW_GREEN' ? '#10B981' : (state.signalPhase === 'EW_AMBER' ? '#F59E0B' : '#EF4444');
+                ctx.fillStyle = '#050811';
+                ctx.strokeStyle = ewColor;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(cx - 86, cy - roadW / 2 - 24, 52, 18, 5);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = 'bold 9px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.fillText(`SIG ${state.signalTimer}s`, cx - 60, cy - roadW / 2 - 12);
+            }
+
+            drawDirectionalArrows(ctx, cx, cy, roadW, isExpress);
+
+            // Render Moving Vehicles + Live Speed Pill (km/h)
+            lastCanvasHitboxes = [];
+            roadVehicles.forEach(v => {
+                let vx = 0, vy = 0, rot = 0;
+                const laneShift = v.lane === 0 ? 13 : 32;
+                if (v.dir === 'E') { vx = v.pos; vy = cy + laneShift; rot = 0; }
+                else if (v.dir === 'W') { vx = v.pos; vy = cy - laneShift; rot = Math.PI; }
+                else if (v.dir === 'S') { vx = isExpress ? (cx - 14) : (cx - laneShift); vy = v.pos; rot = Math.PI / 2; }
+                else { vx = cx + laneShift; vy = v.pos; rot = -Math.PI / 2; }
+
+                lastCanvasHitboxes.push({ id: v.id, x: vx - 12, y: vy - 12, w: 24, h: 24 });
+
+                ctx.save();
+                ctx.translate(vx, vy);
+                ctx.rotate(rot);
+                ctx.fillStyle = v.color;
+                ctx.beginPath();
+                ctx.roundRect(-v.len / 2, -v.wid / 2, v.len, v.wid, 2.5);
+                ctx.fill();
+
+                if (state.selectedVehicleId === v.id) {
+                    ctx.strokeStyle = '#22D3EE';
+                    ctx.lineWidth = 1.8;
+                    ctx.strokeRect(-v.len / 2 - 3, -v.wid / 2 - 3, v.len + 6, v.wid + 6);
+                }
+                ctx.restore();
+
+                if (state.showSpeedBadges) {
+                    const pillText = `${v.speedKmh}`;
+                    const pillBg = v.speedKmh === 0
+                        ? 'rgba(245, 158, 11, 0.92)'
+                        : (v.overspeeding ? 'rgba(244, 63, 94, 0.95)' : 'rgba(15, 23, 42, 0.90)');
+                    const pillFg = v.speedKmh === 0
+                        ? '#050811'
+                        : (v.overspeeding ? '#FFFFFF' : '#34D399');
+
+                    ctx.font = 'bold 8.5px JetBrains Mono';
+                    const tw = ctx.measureText(pillText).width + 6;
+                    const px = vx - tw / 2;
+                    const py = vy - 18;
+
+                    ctx.fillStyle = pillBg;
+                    ctx.beginPath();
+                    ctx.roundRect(px, py, tw, 11, 3);
+                    ctx.fill();
+
+                    ctx.fillStyle = pillFg;
+                    ctx.textAlign = 'center';
+                    ctx.fillText(pillText, vx, py + 8.5);
+                }
+            });
+
+            // Collision Marker
+            if (state.accident && state.accident.active) {
+                const ax = cx + 45, ay = cy + 13;
+                ctx.beginPath();
+                ctx.arc(ax, ay, 18 + Math.sin(state.tick * 0.25) * 5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(244, 63, 94, 0.35)';
+                ctx.fill();
+                ctx.strokeStyle = '#F43F5E';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                ctx.fillStyle = '#F43F5E';
+                ctx.font = 'bold 9px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.fillText('COLLISION (108 CALLED)', ax, ay - 22);
+            }
+
+            // 108 Ambulance
+            if (state.ambulance && state.ambulance.active) {
+                const ambX = state.ambulance.progress * W;
+                const ambY = cy + 13;
+                ctx.beginPath();
+                ctx.arc(ambX, ambY, 17, 0, Math.PI * 2);
+                ctx.fillStyle = state.tick % 14 < 7 ? 'rgba(244, 63, 94, 0.55)' : 'rgba(56, 189, 248, 0.55)';
+                ctx.fill();
+
+                ctx.fillStyle = '#FFFFFF';
+                ctx.strokeStyle = '#F43F5E';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(ambX - 12, ambY - 6, 24, 12, 3);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#22D3EE';
+                ctx.font = 'bold 9px JetBrains Mono';
+                ctx.textAlign = 'center';
+                ctx.fillText(`108 (${state.ambulance.speedKmh} km/h)`, ambX, ambY - 14);
+            }
+
+            ctx.restore();
+        }
+
+        function initLstmChart() {
+            if (typeof Chart === 'undefined') return;
+            const c = document.getElementById('lstmTrafficChart');
+            if (!c) return;
+            lstmChart = new Chart(c.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: ['Now', '+1h', '+2h', '+3h', '+4h', '+5h'],
+                    datasets: [
+                        {
+                            label: 'Congestion (%)',
+                            data: [34, 42, 51, 47, 36, 28],
+                            borderColor: '#06B6D4',
+                            backgroundColor: 'rgba(6, 182, 212, 0.15)',
+                            fill: true,
+                            borderWidth: 2.5,
+                            tension: 0.4
+                        },
+                        {
+                            label: 'Avg Speed (km/h)',
+                            data: [38, 35, 31, 34, 39, 44],
+                            borderColor: '#10B981',
+                            borderDash: [4, 4],
+                            borderWidth: 2,
+                            tension: 0.4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#94A3B8', font: { size: 10 }, boxWidth: 10 } } },
+                    scales: {
+                        x: { grid: { color: 'rgba(30,41,59,0.5)' }, ticks: { color: '#64748B', font: { size: 9 } } },
+                        y: { min: 0, max: 100, grid: { color: 'rgba(30,41,59,0.5)' }, ticks: { color: '#94A3B8', font: { size: 9 } } }
+                    }
+                }
+            });
+        }
+
+        function updateLstmChart() {
+            if (!lstmChart) return;
+            const c = roadCorridors[state.activeCorridorId] || roadCorridors.mg_road;
+            const mult = state.rushHour ? 1.2 : 1.0;
+            const cong = [34, 42, 51, 47, 36, 28].map(v => Math.min(96, Math.round(v * mult * (state.adaptiveSignals ? 0.85 : 1.15))));
+            const spd = cong.map(cVal => Math.max(20, Math.round(c.speedLimit * (1.05 - cVal * 0.0045))));
+            lstmChart.data.datasets[0].data = cong;
+            lstmChart.data.datasets[1].data = spd;
+            lstmChart.update();
+        }
+
+        // 7. MODULE B: SMART PARKING & EV PREDICTION
+        function computeHubMetrics(hub, horizon) {
+            const wave = Math.sin((horizon / 12) * Math.PI) * 24;
+            const ctxAdd = state.parkingContext === 'event' ? 18 : (state.parkingContext === 'rain' ? 12 : 0);
+            const occ = Math.max(20, Math.min(97, Math.round(hub.baseOcc + wave + ctxAdd)));
+            const freeStd = Math.max(4, Math.round(hub.total * (1 - occ / 100)));
+            const freeEv = Math.max(1, Math.round(hub.evTotal * (1 - occ / 106)));
+            const rate = Math.round(hub.baseRate * (1 + (occ / 100) * 0.65));
+            return { occ, freeStd, freeEv, rate };
+        }
+
+        function onParkingContextChange() {
+            state.parkingContext = document.getElementById('pk-event-select').value;
+            renderParkingHubs();
+            updateParkingChart();
+            pushNotification('PARKING', 'Parking Context Updated', `Applied ${state.parkingContext.toUpperCase()} load to parking forecast.`, 'info', true);
+        }
+
+        function onParkingSliderChange(val) {
+            state.parkingHorizon = parseInt(val, 10);
+            document.getElementById('pk-horizon-label').textContent = state.parkingHorizon === 0 ? '+0h (Live)' : `+${state.parkingHorizon}h Forecast`;
+            renderParkingHubs();
+        }
+
+        function renderParkingHubs() {
+            const grid = document.getElementById('parking-hubs-grid');
+            if (!grid) return;
+            grid.innerHTML = parkingHubs.map(hub => {
+                const { occ, freeStd, freeEv, rate } = computeHubMetrics(hub, state.parkingHorizon);
+                const color = occ > 80 ? 'text-rose-400' : (occ > 62 ? 'text-amber-400' : 'text-emerald-400');
+
+                let slotsHtml = '';
+                for (let i = 0; i < 16; i++) {
+                    const isEv = i < 4;
+                    const isFree = isEv ? (i < Math.ceil((freeEv / hub.evTotal) * 4)) : (i - 4 < Math.ceil((freeStd / hub.total) * 12));
+                    slotsHtml += `<span class="h-2.5 rounded-sm ${isFree ? (isEv ? 'bg-cyan-400' : 'bg-emerald-400') : 'bg-slate-700'}"></span>`;
+                }
+
+                return `
+                    <div class="glass-panel rounded-2xl p-3.5 flex flex-col justify-between">
+                        <div>
+                            <div class="flex items-start justify-between">
+                                <div>
+                                    <span class="text-[10px] font-mono text-cyan-400">${hub.id} • ${hub.kw}</span>
+                                    <h4 class="text-xs font-bold text-white mt-0.5">${hub.name}</h4>
+                                </div>
+                                <span class="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-amber-300">₹${rate}/hr</span>
+                            </div>
+                            <div class="mt-2.5 flex items-baseline justify-between">
+                                <div>
+                                    <span class="text-lg font-bold font-mono ${color}">${freeStd}</span>
+                                    <span class="text-[10px] text-slate-400">bays</span>
+                                    <span class="ml-2 text-xs font-mono text-cyan-400">⚡ ${freeEv} EV</span>
+                                </div>
+                                <span class="text-[11px] font-mono font-bold ${color}">${occ}%</span>
+                            </div>
+                            <div class="grid grid-cols-8 gap-1 mt-2.5">${slotsHtml}</div>
+                        </div>
+                        <button onclick="reserveSpecificHub('${hub.id}')" class="mt-3 w-full py-1.5 rounded-xl bg-slate-800 hover:bg-emerald-500/20 hover:text-emerald-300 border border-slate-700 hover:border-emerald-500/40 text-[11px] font-semibold text-slate-200 transition">
+                            Reserve Bay + ANPR Pass
+                        </button>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function reserveSpecificHub(hubId) {
+            const hub = parkingHubs.find(h => h.id === hubId) || parkingHubs[0];
+            const { rate } = computeHubMetrics(hub, state.parkingHorizon);
+            const bayCode = `B2-EV0${1 + Math.floor(Math.random() * 8)}`;
+            document.getElementById('qr-pass-id').textContent = `PASS #BLR-${1000 + Math.floor(Math.random() * 8999)}`;
+            document.getElementById('qr-lot-name').textContent = hub.name;
+            document.getElementById('qr-bay-info').textContent = `Assigned Bay: ${bayCode} (${hub.kw}) • ₹${rate}/hr`;
+            document.getElementById('parking-booking-modal').classList.remove('hidden');
+
+            bumpIntervention(0.8);
+            logDecision('PARKING', '[ANPR-PASS]', `Reserved ${bayCode} at ${hub.name} (${hub.kw}, ₹${rate}/hr).`, '99.2%', 'success');
+            pushNotification('PARKING', `EV Bay Reserved: ${hub.name}`, `Bay ${bayCode} (${hub.kw}) locked at ₹${rate}/hr.`, 'success', true);
+        }
+
+        function findAndBookOptimalSpot() {
+            const area = document.getElementById('pk-dest-select').value;
+            const match = parkingHubs.find(h => h.area === area) || parkingHubs[0];
+            const { freeEv, rate } = computeHubMetrics(match, state.parkingHorizon);
+            document.getElementById('pk-ai-pick-title').textContent = `Best Match: ${match.name}`;
+            document.getElementById('pk-ai-pick-sub').textContent = `${freeEv} EV chargers free (${match.kw}) • ₹${rate}/hr`;
+            reserveSpecificHub(match.id);
+        }
+
+        function initParkingChart() {
+            if (typeof Chart === 'undefined') return;
+            const c = document.getElementById('parkingForecastChart');
+            if (!c) return;
+            parkingChart = new Chart(c.getContext('2d'), {
+                type: 'bar',
+                data: {
+                    labels: ['Now', '+2h', '+4h', '+6h', '+8h', '+10h', '+12h'],
+                    datasets: [{
+                        label: 'Occupancy (%)',
+                        data: [60, 72, 84, 88, 76, 61, 48],
+                        backgroundColor: 'rgba(16, 185, 129, 0.55)',
+                        borderColor: '#10B981',
+                        borderWidth: 1,
+                        borderRadius: 6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { color: '#64748B', font: { size: 9 } } },
+                        y: { min: 0, max: 100, grid: { color: 'rgba(30,41,59,0.5)' }, ticks: { color: '#64748B', font: { size: 9 } } }
+                    }
+                }
+            });
+        }
+
+        function updateParkingChart() {
+            if (!parkingChart) return;
+            const add = state.parkingContext === 'event' ? 14 : (state.parkingContext === 'rain' ? 9 : 0);
+            parkingChart.data.datasets[0].data = [60, 72, 84, 88, 76, 61, 48].map(v => Math.min(98, v + add));
+            parkingChart.update();
+        }
+
+        // 8. MODULE C: AI WASTE MANAGEMENT & FLEET ROUTING
+        function renderWasteBins() {
+            const box = document.getElementById('waste-bins-container');
+            if (!box) return;
+            const filter = document.getElementById('waste-health-filter').value;
+            let list = smartBins;
+            if (filter === 'CRITICAL') list = smartBins.filter(b => b.fill >= 75);
+            else if (filter === 'GAS') list = smartBins.filter(b => b.methane >= 25 || b.temp >= 33);
+            else if (filter === 'SOLAR') list = smartBins.filter(b => b.solar);
+
+            box.innerHTML = list.map(b => {
+                const isCrit = b.fill >= 75 || b.methane >= 30;
+                const barCol = b.fill >= 75 ? 'bg-rose-500' : (b.fill >= 55 ? 'bg-amber-400' : 'bg-emerald-400');
+                return `
+                    <div class="glass-card rounded-xl p-2.5 ${isCrit ? 'border-rose-500/40' : ''}">
+                        <div class="flex items-center justify-between text-xs">
+                            <span class="font-mono font-bold text-white">${b.id} • ${b.zone}</span>
+                            <span class="font-mono font-bold ${b.fill >= 75 ? 'text-rose-400' : 'text-emerald-400'}">${b.fill}%</span>
+                        </div>
+                        <div class="w-full h-1.5 bg-slate-800 rounded-full mt-1.5 overflow-hidden">
+                            <div class="h-full ${barCol} transition-all duration-300" style="width: ${b.fill}%"></div>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] font-mono text-slate-400 mt-1.5">
+                            <span>W:${b.wet}% D:${b.dry}% H:${b.haz}% E:${b.ewaste}%</span>
+                            <span class="${b.solar ? 'text-amber-300' : 'text-slate-500'}">${b.solar ? 'SOLAR' : 'STD'}</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[10px] font-mono mt-1">
+                            <span class="${b.methane >= 30 ? 'text-rose-400 font-bold animate-pulse' : 'text-cyan-300'}">CH₄: ${b.methane}ppm</span>
+                            <span class="${b.temp >= 35 ? 'text-rose-400 font-bold' : 'text-slate-300'}">TEMP: ${b.temp}°C</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function triggerFestivalWaste() {
+            smartBins.forEach((b, i) => {
+                if (i % 2 === 0) b.fill = Math.min(96, b.fill + 24);
+            });
+            renderWasteBins();
+            logDecision('WASTE', '[ULTRASONIC]', 'Festival waste surge! 6 smart bins crossed 75% fill.', '97.4%', 'warn');
+            pushNotification('WASTE', 'Festival Waste Surge', '6 bins crossed 75% capacity. Run EV Route Optimizer.', 'warn', true);
+        }
+
+        function triggerMethaneAlert() {
+            const target = smartBins[6];
+            target.methane = 48;
+            target.temp = 41;
+            target.fill = 91;
+            renderWasteBins();
+            bumpIntervention(1.0);
+            logDecision('WASTE', '[GAS-HAZARD]', `Methane spike (${target.methane} ppm, ${target.temp}°C) at ${target.id} (${target.zone})!`, '99.0%', 'danger');
+            pushNotification('WASTE', `Methane Spike: ${target.id}`, `${target.zone} CH₄ hit ${target.methane}ppm & ${target.temp}°C!`, 'danger', true);
+        }
+
+        function runWasteRouteOptimizer() {
+            let cleared = 0;
+            smartBins.forEach(b => {
+                if (b.fill >= 75 || b.methane >= 30) {
+                    b.fill = 18;
+                    b.methane = 12;
+                    b.temp = 28;
+                    cleared++;
+                }
+            });
+            state.wasteRouteActive = true;
+            renderWasteBins();
+            bumpIntervention(4.2);
+            document.getElementById('waste-truck-badge').textContent = `EV-TRUCK-01 (${cleared} STOPS)`;
+            logDecision('WASTE', '[TSP-OPTIMIZER]', `Optimized EV route (-31.4% distance). Cleared ${cleared} priority bins.`, '98.7%', 'success');
+            pushNotification('WASTE', 'EV Route Optimized', `Cleared ${cleared} high-fill/gas bins • Saved 9.8 km & 32.6 kg CO₂.`, 'success', true);
+        }
+
+        function drawWasteFleetCanvas() {
+            const c = document.getElementById('wasteFleetCanvas');
+            if (!c || state.activeModule !== 'waste') return;
+            const rect = c.parentElement.getBoundingClientRect();
+            const w = rect.width, h = rect.height;
+            if (w <= 0 || h <= 0) return;
+
+            const ctx = c.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+
+            ctx.strokeStyle = 'rgba(30, 41, 59, 0.45)';
+            ctx.lineWidth = 1;
+            for (let x = 0; x < w; x += 28) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+            for (let y = 0; y < h; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+
+            const routeNodes = smartBins.filter((_, idx) => idx % 2 === 0 || smartBins[idx].fill >= 70);
+            ctx.strokeStyle = '#10B981';
+            ctx.lineWidth = 2.5;
+            ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            routeNodes.forEach((b, i) => {
+                const bx = b.nx * w, by = b.ny * h;
+                if (i === 0) ctx.moveTo(bx, by);
+                else ctx.lineTo(bx, by);
+            });
+            ctx.closePath();
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            if (routeNodes.length > 1) {
+                state.truckProgress += 0.008;
+                if (state.truckProgress >= 1) {
+                    state.truckProgress = 0;
+                    state.truckLeg = (state.truckLeg + 1) % routeNodes.length;
+                }
+                const nA = routeNodes[state.truckLeg];
+                const nB = routeNodes[(state.truckLeg + 1) % routeNodes.length];
+                const tx = (nA.nx + (nB.nx - nA.nx) * state.truckProgress) * w;
+                const ty = (nA.ny + (nB.ny - nA.ny) * state.truckProgress) * h;
+
+                ctx.fillStyle = '#22D3EE';
+                ctx.beginPath();
+                ctx.arc(tx, ty, 8, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            smartBins.forEach(b => {
+                const bx = b.nx * w, by = b.ny * h;
+                ctx.beginPath();
+                ctx.arc(bx, by, 7.5, 0, Math.PI * 2);
+                ctx.fillStyle = (b.fill >= 75 || b.methane >= 30) ? '#F43F5E' : (b.fill >= 55 ? '#F59E0B' : '#10B981');
+                ctx.fill();
+
+                ctx.font = 'bold 9px JetBrains Mono';
+                ctx.fillStyle = '#CBD5E1';
+                ctx.textAlign = 'center';
+                ctx.fillText(`${b.id} (${b.fill}%)`, bx, by + 18);
+            });
+        }
+
+        // 9. MODULE D: AI SURVEILLANCE, ANPR & CROWD ANALYTICS
+        function renderEChallans() {
+            const tbody = document.getElementById('echallan-tbody');
+            const cntEl = document.getElementById('echallan-count');
+            if (!tbody) return;
+            if (cntEl) cntEl.textContent = `${eChallans.length} Tickets Issued`;
+            tbody.innerHTML = eChallans.map(ch => `
+                <tr class="hover:bg-slate-800/40">
+                    <td class="py-2 px-2 text-cyan-400 font-bold">${ch.id}</td>
+                    <td class="py-2 px-2 text-white font-bold">${ch.plate}</td>
+                    <td class="py-2 px-2 text-rose-300">${ch.violation}</td>
+                    <td class="py-2 px-2 text-slate-400">${ch.location}</td>
+                    <td class="py-2 px-2 text-amber-300 font-bold">${ch.fine}</td>
+                    <td class="py-2 px-2"><span class="px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px]">${ch.status}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function simulateANPRViolation(vType) {
+            const plates = ['KA-01-EQ-7741', 'KA-05-MK-3109', 'KA-04-AB-5592', 'KA-51-HN-8820'];
+            const locs = ['Silk Board Jn', 'Brigade Rd', 'ORR Flyover', 'Central Metro'];
+            const camIdx = vType === 'Crowd Stampede Risk' ? 1 : (vType === 'Fire / Smoke Alert' ? 3 : 2);
+
+            state.camAlerts[camIdx] = vType;
+            const badge = document.getElementById(`cam-status-${camIdx}`);
+            if (badge) {
+                badge.textContent = vType.toUpperCase();
+                badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-rose-500/25 text-rose-300 animate-pulse';
+            }
+
+            setTimeout(() => {
+                state.camAlerts[camIdx] = null;
+                if (badge) {
+                    badge.textContent = 'VISION ACTIVE';
+                    badge.className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400';
+                }
+            }, 5000);
+
+            if (vType === 'No Helmet') {
+                const plate = plates[Math.floor(Math.random() * plates.length)];
+                const newChallan = {
+                    id: `BLR-EC-${9042 + eChallans.length}`,
+                    plate,
+                    violation: 'No Helmet / Lane',
+                    location: locs[camIdx],
+                    fine: '₹1,000',
+                    status: 'SMS SENT'
+                };
+                eChallans.unshift(newChallan);
+                renderEChallans();
+                bumpIntervention(0.3);
+                logDecision('VISION', '[ANPR-CHALLAN]', `Captured ${plate} at ${locs[camIdx]}. Issued ${newChallan.id}.`, '98.9%', 'vision');
+                pushNotification('VISION', `ANPR Violation: ${plate}`, `No Helmet / Lane at ${locs[camIdx]} • ₹1,000 challan sent.`, 'warn', true);
+            } else if (vType === 'Crowd Stampede Risk') {
+                bumpIntervention(0.6);
+                logDecision('VISION', '[CROWD-HEATMAP]', 'High pedestrian density cluster detected on Brigade Road.', '96.7%', 'warn');
+                pushNotification('VISION', 'Crowd Density Surge', 'Brigade Road crowd heatmap elevated.', 'warn', true);
+            } else {
+                bumpIntervention(1.2);
+                logDecision('VISION', '[FIRE-SMOKE-AI]', 'Thermal/smoke anomaly detected near Central Metro Gate!', '99.4%', 'danger');
+                pushNotification('VISION', 'FIRE / SMOKE ALERT!', 'Thermal anomaly at Central Metro Gate.', 'danger', true);
+            }
+        }
+
+        function openCameraFocusModal(idx) {
+            state.focusedCamIdx = idx;
+            const titles = [
+                'CAM-01 • Silk Board Junction — ANPR Plate OCR',
+                'CAM-02 • Brigade Road — Crowd Density Heatmap',
+                'CAM-03 • Outer Ring Road — Helmet & Radar Monitor',
+                'CAM-04 • Central Metro Gate — Thermal / Fire & Smoke'
+            ];
+            document.getElementById('focus-cam-badge').textContent = `CAM-0${idx + 1} • YOLOv9-INT8 FOCUS`;
+            document.getElementById('focus-cam-title').textContent = titles[idx];
+            document.getElementById('cctv-focus-modal').classList.remove('hidden');
+            resizeCanvases();
+        }
+
+        function closeCameraFocusModal() {
+            state.focusedCamIdx = null;
+            document.getElementById('cctv-focus-modal').classList.add('hidden');
+        }
+
+        function paintSingleCamera(c, idx) {
+            if (!c) return;
+            const rect = c.parentElement.getBoundingClientRect();
+            const w = rect.width, h = rect.height;
+            if (w <= 0 || h <= 0) return;
+            const ctx = c.getContext('2d');
+            ctx.clearRect(0, 0, w, h);
+
+            ctx.fillStyle = '#070B15';
+            ctx.fillRect(0, 0, w, h);
+
+            ctx.strokeStyle = 'rgba(56, 189, 248, 0.16)';
+            ctx.beginPath(); ctx.moveTo(w * 0.15, h); ctx.lineTo(w * 0.4, h * 0.22); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(w * 0.85, h); ctx.lineTo(w * 0.6, h * 0.22); ctx.stroke();
+
+            const alert = state.camAlerts[idx];
+            if (idx === 1) {
+                const rad = alert === 'Crowd Stampede Risk' ? 46 : 24;
+                const grad = ctx.createRadialGradient(w * 0.5, h * 0.55, 4, w * 0.5, h * 0.55, rad);
+                grad.addColorStop(0, alert === 'Crowd Stampede Risk' ? 'rgba(244,63,94,0.65)' : 'rgba(245,158,11,0.35)');
+                grad.addColorStop(1, 'rgba(244,63,94,0)');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.arc(w * 0.5, h * 0.55, rad, 0, Math.PI * 2); ctx.fill();
+            }
+
+            const boxes = alert === 'Crowd Stampede Risk' ? 4 : 2;
+            for (let b = 0; b < boxes; b++) {
+                const t = state.tick * 0.018 + b * 1.6 + idx;
+                const bx = w * (0.28 + 0.44 * ((Math.sin(t) + 1) / 2));
+                const by = h * (0.42 + 0.32 * ((Math.cos(t * 0.8) + 1) / 2));
+                const bw = idx === 1 ? 22 : 42;
+                const bh = idx === 1 ? 34 : 26;
+
+                const isViolation = Boolean(alert) && b === 0;
+                ctx.strokeStyle = isViolation ? '#F43F5E' : '#10B981';
+                ctx.lineWidth = 1.8;
+                ctx.strokeRect(bx - bw / 2, by - bh / 2, bw, bh);
+
+                ctx.fillStyle = isViolation ? '#F43F5E' : '#10B981';
+                ctx.fillRect(bx - bw / 2, by - bh / 2 - 12, bw + 36, 12);
+                ctx.fillStyle = '#050811';
+                ctx.font = 'bold 8px JetBrains Mono';
+                ctx.textAlign = 'left';
+                const tag = isViolation ? alert.toUpperCase() : (idx === 0 ? 'KA-01 OCR 99%' : (idx === 1 ? 'PED 97%' : (idx === 2 ? 'HELMET OK' : 'THERMAL OK')));
+                ctx.fillText(tag, bx - bw / 2 + 2, by - bh / 2 - 3);
+            }
+        }
+
+        function drawSurveillanceCanvases() {
+            if (state.activeModule !== 'surveillance') return;
+            for (let i = 0; i < 4; i++) {
+                paintSingleCamera(document.getElementById(`cctvCanvas${i}`), i);
+            }
+            if (state.focusedCamIdx !== null) {
+                paintSingleCamera(document.getElementById('cctvFocusCanvas'), state.focusedCamIdx);
+            }
+        }
+
+        // 10. AI CITY COPILOT
+        function toggleCopilot() {
+            document.getElementById('copilot-panel').classList.toggle('hidden');
+        }
+
+        function sendQuickPrompt(text) {
+            document.getElementById('copilot-input').value = text;
+            submitCopilotQuery(new Event('submit'));
+        }
+
+        function addChatBubble(role, htmlText) {
+            const box = document.getElementById('copilot-chat-box');
+            if (!box) return;
+            const div = document.createElement('div');
+            div.className = role === 'user'
+                ? 'p-3 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-100 ml-6'
+                : 'p-3 rounded-xl bg-iccc-900 border border-slate-800 text-slate-200 mr-4 leading-relaxed';
+            div.innerHTML = htmlText;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function localCopilotReply(q) {
+            const ql = q.toLowerCase();
+            const c = roadCorridors[state.activeCorridorId] || roadCorridors.mg_road;
+            if (ql.includes('108') || ql.includes('ambulance') || ql.includes('accident')) {
+                dispatch108Ambulance(false);
+                return `<strong>108 Green Corridor Dispatched on ${c.shortName}:</strong> Preempted signals for KA-01-G-1084 toward ${c.hospital}.`;
+            }
+            if (ql.includes('parking') || ql.includes('ev') || ql.includes('waste')) {
+                const critBins = smartBins.filter(b => b.fill >= 75 || b.methane >= 30).length;
+                return `<strong>EV Parking & Waste Brief:</strong> Horizon is <strong>+${state.parkingHorizon}h</strong> (${state.parkingContext}). <strong>${critBins} bin(s)</strong> need priority EV collection.`;
+            }
+            return `<strong>Corridor Brief (${c.shortName}):</strong> Speed limit is <strong>${c.speedLimit} km/h</strong> (${state.overspeedCount} overspeed flags). ${notifications.length} alerts logged in Notification Center.`;
+        }
+
+        async function submitCopilotQuery(e) {
+            e.preventDefault();
+            const inp = document.getElementById('copilot-input');
+            const query = inp.value.trim();
+            if (!query) return;
+            inp.value = '';
+            addChatBubble('user', query);
+
+            const c = roadCorridors[state.activeCorridorId] || roadCorridors.mg_road;
+            const apiKey = "";
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            const prompt = `You are NexusCity AI Copilot for Bengaluru ICCC. Answer concisely in 2-3 sentences. Active Corridor: ${c.title} (Limit ${c.speedLimit} km/h), Overspeeds: ${state.overspeedCount}, Parking Horizon: +${state.parkingHorizon}h. Query: ${query}`;
+
+            try {
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                });
+                if (!res.ok) throw new Error('fallback');
+                const data = await res.json();
+                const txt = data?.candidates?.[0]?.content?.parts?.[0]?.text || localCopilotReply(query);
+                addChatBubble('ai', txt.replace(/\n/g, '<br>'));
+            } catch {
+                addChatBubble('ai', localCopilotReply(query));
+            }
+        }
+
+        // 11. CANVAS RESIZE & SAFE BOOTSTRAP
+        function resizeCanvases() {
+            const pairs = [
+                ['roadTwinCanvas', 'road-canvas-wrap'],
+                ['wasteFleetCanvas', 'waste-map-wrap']
+            ];
+            pairs.forEach(([cid, wid]) => {
+                const c = document.getElementById(cid);
+                const wEl = document.getElementById(wid);
+                if (!c || !wEl) return;
+                const r = wEl.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) {
+                    const dpr = window.devicePixelRatio || 1;
+                    c.width = Math.round(r.width * dpr);
+                    c.height = Math.round(r.height * dpr);
+                    c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+                }
+            });
+            for (let i = 0; i < 4; i++) {
+                const c = document.getElementById(`cctvCanvas${i}`);
+                if (c && c.parentElement) {
+                    const r = c.parentElement.getBoundingClientRect();
+                    if (r.width > 0 && r.height > 0) {
+                        const dpr = window.devicePixelRatio || 1;
+                        c.width = Math.round(r.width * dpr);
+                        c.height = Math.round(r.height * dpr);
+                        c.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+                    }
+                }
+            }
+            const fc = document.getElementById('cctvFocusCanvas');
+            if (fc && fc.parentElement) {
+                const r = fc.parentElement.getBoundingClientRect();
+                if (r.width > 0 && r.height > 0) {
+                    const dpr = window.devicePixelRatio || 1;
+                    fc.width = Math.round(r.width * dpr);
+                    fc.height = Math.round(r.height * dpr);
+                    fc.getContext('2d').setTransform(dpr, 0, 0, dpr, 0, 0);
+                }
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvases);
+
+        function mainLoop() {
+            try {
+                updateRoadSimulation();
+                drawRoadTwinCanvas();
+                drawWasteFleetCanvas();
+                drawSurveillanceCanvases();
+            } catch (err) {
+                showRuntimeGuard(err.message || 'Render loop recovered');
+            }
+            requestAnimationFrame(mainLoop);
+        }
+
+        function bootstrapICCC() {
+            try {
+                resizeCanvases();
+                initCorridorVehicles(roadCorridors.mg_road);
+                initLstmChart();
+                initParkingChart();
+                renderParkingHubs();
+                renderWasteBins();
+                renderEChallans();
+                renderVehicleSpeedTable();
+                updateVehicleInspectorUI();
+
+                pushNotification('EMERGENCY', '4 Bengaluru Corridors Ready', 'Switch between MG Road, ORR Flyover, 100ft Rd, and E-City Toll.', 'info', false);
+                pushNotification('PARKING', 'EV & +12h Parking Forecast Ready', 'Live charger kW & event/weather pricing enabled.', 'success', false);
+                pushNotification('WASTE', '12 Smart Bins & EV Fleet Online', 'Wet/Dry/Haz/E-Waste, CH₄ ppm, temp & solar compactors active.', 'info', false);
+
+                logDecision('TRAFFIC', '[ICCC-v4.2]', 'Initialized with 4 road corridors, route layers, live km/h tags & Notification Center.', '99.8%', 'success');
+                logDecision('PARKING', '[EV-FORECAST]', '6 hubs synced with +0h to +12h demand & ANPR pass booking.', '97.5%', 'info');
+                logDecision('WASTE', '[TSP-ROUTER]', '12 smart bins & EV collection route simulation ready.', '98.4%', 'info');
+                logDecision('VISION', '[ANPR-VAHAN]', '4-camera YOLOv9 grid & E-Challan ledger active.', '99.1%', 'vision');
+
+                mainLoop();
+            } catch (err) {
+                showRuntimeGuard(err.message || 'Bootstrap recovery');
+            }
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', bootstrapICCC);
+        } else {
+            bootstrapICCC();
+        }
+    </script>
+</body>
+</html>
